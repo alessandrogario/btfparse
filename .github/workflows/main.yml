@@ -1,0 +1,74 @@
+name: Linux
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  format:
+    strategy:
+      matrix:
+        runner_image: [ubuntu-22.04]
+
+    uses: ./.github/workflows/format.yml
+    secrets: inherit
+
+    with:
+      runner_image: ${{ matrix.runner_image }}
+
+  clippy:
+    needs: [format]
+
+    strategy:
+      matrix:
+        runner_image: [ubuntu-22.04]
+        build_type: [Release, Debug]
+
+    uses: ./.github/workflows/clippy.yml
+    secrets: inherit
+
+    with:
+      runner_image: ${{ matrix.runner_image }}
+      build_type: ${{ matrix.build_type }}
+
+  check:
+    needs: [format]
+
+    strategy:
+      matrix:
+        runner_image: [ubuntu-22.04]
+        build_type: [Release, Debug]
+
+    uses: ./.github/workflows/check.yml
+    secrets: inherit
+
+    with:
+      runner_image: ${{ matrix.runner_image }}
+      build_type: ${{ matrix.build_type }}
+
+  linux:
+    needs: [clippy, check]
+
+    strategy:
+      matrix:
+        runner_image: [ubuntu-22.04]
+        build_type: [Release, Debug]
+
+    uses: ./.github/workflows/posix_build.yml
+    secrets: inherit
+
+    with:
+      runner_image: ${{ matrix.runner_image }}
+      build_type: ${{ matrix.build_type }}

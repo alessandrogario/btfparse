@@ -1,0 +1,37 @@
+name: posix_build
+
+on:
+  workflow_call:
+    inputs:
+      runner_image:
+        required: true
+        type: string
+
+      build_type:
+        required: true
+        type: string
+
+jobs:
+  posix_build:
+    runs-on: ${{ inputs.runner_image }}
+
+    steps:
+      - name: Clone the source code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        working-directory: ./.github/workflows/scripts
+        run: |
+          ./install_rust.sh
+
+      - name: Setup the command line build arguments
+        id: build_type
+        run: |
+          if [[ "${{ matrix.build_type }}" == "Release" ]]; then
+            echo "VALUE=--release" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build the project
+        run: |
+          cargo build \
+            ${{ steps.build_type.outputs.VALUE }}

@@ -1,0 +1,27 @@
+name: format
+
+on:
+  workflow_call:
+    inputs:
+      runner_image:
+        required: true
+        type: string
+
+jobs:
+  format:
+    runs-on: ${{ inputs.runner_image }}
+
+    steps:
+      - name: Clone the source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        working-directory: ./.github/workflows/scripts
+        run: |
+          ./install_rust.sh
+
+      - name: Run cargo fmt
+        run: |
+          cargo fmt --all --check
