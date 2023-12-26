@@ -35,3 +35,8 @@ jobs:
         run: |
           cargo build \
             ${{ steps.build_type.outputs.VALUE }}
+
+      - name: Run the tests
+        run: |
+          cargo test \
+            ${{ steps.build_type.outputs.VALUE }}

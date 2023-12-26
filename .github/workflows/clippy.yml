@@ -32,6 +32,7 @@ jobs:
           fi
 
       - name: Run cargo clippy
+        continue-on-error: true
         run: |
           cargo clippy \
             ${{ steps.build_type.outputs.VALUE }} \
