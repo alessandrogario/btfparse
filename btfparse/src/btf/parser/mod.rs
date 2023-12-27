@@ -21,3 +21,6 @@ pub use type_data::*;
 
 mod type_enum;
 pub use type_enum::*;
+
+mod enum32;
+pub use enum32::*;
