@@ -1,4 +1,4 @@
-use crate::btf::parser::{Const, Enum32, Int, Ptr, Typedef, Volatile};
+use crate::btf::parser::{Array, Const, Enum32, Int, Ptr, Typedef, Volatile};
 
 /// An enum representing a BTF type
 pub enum Type {
@@ -7,6 +7,9 @@ pub enum Type {
 
     /// A ptr type
     Ptr(Ptr),
+
+    /// An array type
+    Array(Array),
 
     /// A typedef type
     Typedef(Typedef),

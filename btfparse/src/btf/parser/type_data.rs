@@ -2,7 +2,7 @@ use core::panic;
 use std::collections::BTreeMap;
 
 use crate::btf::parser::{
-    BTFHeader, Const, Enum32, Int, Ptr, Type, TypeHeader, TypeKind, Typedef, Volatile,
+    Array, BTFHeader, Const, Enum32, Int, Ptr, Type, TypeHeader, TypeKind, Typedef, Volatile,
 };
 use crate::btf::{Readable, Result as BTFResult};
 use crate::utils::Reader;
@@ -19,6 +19,7 @@ fn get_btf_type_name(btf_type: &Type) -> Option<String> {
         Type::Enum(enum32) => Some(enum32.name().to_string()),
         Type::Typedef(typedef) => Some(typedef.name().to_string()),
         Type::Ptr(_) => None,
+        Type::Array(_) => None,
         Type::Volatile(_) => None,
         Type::Const(_) => None,
     }
@@ -54,6 +55,7 @@ impl TypeData {
             let btf_type = match type_header.kind() {
                 TypeKind::Int => Type::Int(Int::new(&mut reader, &btf_header, &type_header)?),
                 TypeKind::Ptr => Type::Ptr(Ptr::new(&type_header)?),
+                TypeKind::Array => Type::Array(Array::new(&mut reader, &btf_header, &type_header)?),
                 TypeKind::Enum => Type::Enum(Enum32::new(&mut reader, &btf_header, &type_header)?),
                 TypeKind::Typedef => {
                     Type::Typedef(Typedef::new(&mut reader, &btf_header, &type_header)?)

@@ -28,6 +28,9 @@ pub use enum32::*;
 mod ptr;
 pub use ptr::*;
 
+mod array;
+pub use array::*;
+
 mod volatile;
 pub use volatile::*;
 
