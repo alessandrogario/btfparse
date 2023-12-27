@@ -13,6 +13,9 @@ pub use string::*;
 mod int;
 pub use int::*;
 
+mod typedef;
+pub use typedef::*;
+
 mod type_data;
 pub use type_data::*;
 

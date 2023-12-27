@@ -34,6 +34,7 @@ pub struct Int {
 }
 
 impl Int {
+    /// Creates a new int type
     pub fn new(
         reader: &mut Reader,
         btf_header: &BTFHeader,
