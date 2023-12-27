@@ -27,3 +27,6 @@ pub use enum32::*;
 
 mod ptr;
 pub use ptr::*;
+
+mod const_type;
+pub use const_type::*;
