@@ -1,7 +1,9 @@
 use core::panic;
 use std::collections::BTreeMap;
 
-use crate::btf::parser::{BTFHeader, Const, Enum32, Int, Ptr, Type, TypeHeader, TypeKind, Typedef};
+use crate::btf::parser::{
+    BTFHeader, Const, Enum32, Int, Ptr, Type, TypeHeader, TypeKind, Typedef, Volatile,
+};
 use crate::btf::{Readable, Result as BTFResult};
 use crate::utils::Reader;
 
@@ -17,6 +19,7 @@ fn get_btf_type_name(btf_type: &Type) -> Option<String> {
         Type::Enum(enum32) => Some(enum32.name().to_string()),
         Type::Typedef(typedef) => Some(typedef.name().to_string()),
         Type::Ptr(_) => None,
+        Type::Volatile(_) => None,
         Type::Const(_) => None,
     }
 }
@@ -56,6 +59,7 @@ impl TypeData {
                     Type::Typedef(Typedef::new(&mut reader, &btf_header, &type_header)?)
                 }
                 TypeKind::Const => Type::Const(Const::new(&type_header)?),
+                TypeKind::Volatile => Type::Volatile(Volatile::new(&type_header)?),
 
                 _ => {
                     panic!("Unsupported type: {:?}", type_header.kind());
