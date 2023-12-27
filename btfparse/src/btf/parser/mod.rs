@@ -24,3 +24,6 @@ pub use type_enum::*;
 
 mod enum32;
 pub use enum32::*;
+
+mod ptr;
+pub use ptr::*;

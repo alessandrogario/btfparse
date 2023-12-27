@@ -1,7 +1,7 @@
 use core::panic;
 use std::collections::BTreeMap;
 
-use crate::btf::parser::{BTFHeader, Enum32, Int, Type, TypeHeader, TypeKind, Typedef};
+use crate::btf::parser::{BTFHeader, Enum32, Int, Ptr, Type, TypeHeader, TypeKind, Typedef};
 use crate::btf::{Readable, Result as BTFResult};
 use crate::utils::Reader;
 
@@ -11,11 +11,12 @@ pub struct TypeData {
     pub id_to_type: BTreeMap<u32, Type>,
 }
 
-fn get_btf_type_name(btf_type: &Type) -> String {
+fn get_btf_type_name(btf_type: &Type) -> Option<String> {
     match btf_type {
-        Type::Int(int) => int.name().to_string(),
-        Type::Enum(enum32) => enum32.name().to_string(),
-        Type::Typedef(typedef) => typedef.name().to_string(),
+        Type::Int(int) => Some(int.name().to_string()),
+        Type::Enum(enum32) => Some(enum32.name().to_string()),
+        Type::Typedef(typedef) => Some(typedef.name().to_string()),
+        Type::Ptr(_) => None,
     }
 }
 
@@ -48,6 +49,7 @@ impl TypeData {
 
             let btf_type = match type_header.kind() {
                 TypeKind::Int => Type::Int(Int::new(&mut reader, &btf_header, &type_header)?),
+                TypeKind::Ptr => Type::Ptr(Ptr::new(&type_header)?),
                 TypeKind::Enum => Type::Enum(Enum32::new(&mut reader, &btf_header, &type_header)?),
                 TypeKind::Typedef => {
                     Type::Typedef(Typedef::new(&mut reader, &btf_header, &type_header)?)
@@ -58,12 +60,14 @@ impl TypeData {
                 }
             };
 
-            let type_name = get_btf_type_name(&btf_type);
             let type_id = type_id_generator;
             type_id_generator += 1;
 
-            type_data.id_to_name.insert(type_id, type_name.clone());
-            type_data.name_to_id.insert(type_name, type_id);
+            if let Some(type_name) = get_btf_type_name(&btf_type) {
+                type_data.id_to_name.insert(type_id, type_name.clone());
+                type_data.name_to_id.insert(type_name, type_id);
+            }
+
             type_data.id_to_type.insert(type_id, btf_type);
         }
 

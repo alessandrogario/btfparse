@@ -1,9 +1,12 @@
-use crate::btf::parser::{Enum32, Int, Typedef};
+use crate::btf::parser::{Enum32, Int, Ptr, Typedef};
 
 /// An enum representing a BTF type
 pub enum Type {
     /// An integer type
     Int(Int),
+
+    /// A ptr type
+    Ptr(Ptr),
 
     /// A typedef type
     Typedef(Typedef),
