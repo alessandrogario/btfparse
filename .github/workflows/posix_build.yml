@@ -40,3 +40,9 @@ jobs:
         run: |
           cargo test \
             ${{ steps.build_type.outputs.VALUE }}
+
+      - name: Run dump-btf against /sys/kernel/btf/vmlinux
+        run: |
+          cargo run --bin dump-btf -- \
+            ${{ steps.build_type.outputs.VALUE }} \
+            "/sys/kernel/btf/vmlinux"
