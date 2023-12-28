@@ -1,4 +1,7 @@
-use crate::btf::{parse_string, FileHeader, Kind, Result as BTFResult, Type, TypeHeader};
+use crate::btf::{
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
+    Result as BTFResult, Type, TypeHeader,
+};
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 

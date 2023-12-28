@@ -46,6 +46,17 @@ macro_rules! define_type {
                 file_header: &FileHeader,
                 type_header: TypeHeader,
             ) -> BTFResult<Self> {
+                if !matches!(type_header.kind(), Kind::$name) {
+                    return Err(BTFError::new(
+                        BTFErrorKind::InvalidBTFKind,
+                        &format!(
+                            "Invalid type kind: {:?} (expected {:?})",
+                            type_header.kind(),
+                            Kind::$name
+                        ),
+                    ));
+                }
+
                 let name = if type_header.name_offset() != 0 {
                     Some(parse_string(
                         reader,
@@ -77,6 +88,17 @@ macro_rules! define_type {
                 file_header: &FileHeader,
                 type_header: TypeHeader,
             ) -> BTFResult<Self> {
+                if !matches!(type_header.kind(), Kind::$name) {
+                    return Err(BTFError::new(
+                        BTFErrorKind::InvalidBTFKind,
+                        &format!(
+                            "Invalid type kind: {:?} (expected {:?})",
+                            type_header.kind(),
+                            Kind::$name
+                        ),
+                    ));
+                }
+
                 let name = if type_header.name_offset() != 0 {
                     Some(parse_string(
                         reader,

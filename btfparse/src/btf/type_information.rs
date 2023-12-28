@@ -1,6 +1,6 @@
 use crate::btf::{
-    Array, Const, Enum, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Int, Kind, Ptr,
-    Readable, Result as BTFResult, Type, TypeHeader, Typedef, Volatile,
+    Array, Const, Enum, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, FuncProto, Int,
+    Kind, Ptr, Readable, Result as BTFResult, Type, TypeHeader, Typedef, Volatile,
 };
 use crate::generate_constructor_dispatcher;
 use crate::utils::Reader;
@@ -30,6 +30,9 @@ pub enum TypeVariant {
 
     /// An array type
     Array(Array),
+
+    /// A function prototype
+    FuncProto(FuncProto),
 }
 
 /// Returns the name of the given type
@@ -42,7 +45,8 @@ fn get_type_enum_value_name(type_var: &TypeVariant) -> Option<String> {
         TypeVariant::Ptr(_)
         | TypeVariant::Const(_)
         | TypeVariant::Volatile(_)
-        | TypeVariant::Array(_) => None,
+        | TypeVariant::Array(_)
+        | TypeVariant::FuncProto(_) => None,
     }
 }
 
@@ -58,7 +62,7 @@ pub struct TypeInformation {
     id_to_name_map: BTreeMap<u32, String>,
 }
 
-generate_constructor_dispatcher!(Int, Typedef, Enum, Ptr, Const, Volatile, Array);
+generate_constructor_dispatcher!(Int, Typedef, Enum, Ptr, Const, Volatile, Array, FuncProto);
 
 impl TypeInformation {
     /// Creates a new `TypeInformation` object

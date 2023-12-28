@@ -34,6 +34,9 @@ pub use r#type::*;
 mod array;
 pub use array::*;
 
+mod func_proto;
+pub use func_proto::*;
+
 mod define_type;
 
 mod type_header;
