@@ -64,6 +64,9 @@ pub use fwd::*;
 mod var;
 pub use var::*;
 
+mod decl_tag;
+pub use decl_tag::*;
+
 mod define_type;
 
 mod type_header;

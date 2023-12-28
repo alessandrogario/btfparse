@@ -165,13 +165,6 @@ macro_rules! generate_constructor_dispatcher {
                 $(
                     Kind::$kind => TypeVariant::$kind($kind::new(reader, file_header, type_header)?),
                 )+
-
-                _ => {
-                    return Err(BTFError::new(
-                        BTFErrorKind::InvalidBTFKind,
-                        &format!("Unimplemented type kind: {:?}", type_header.kind()),
-                    ));
-                }
             })
         }
     };
