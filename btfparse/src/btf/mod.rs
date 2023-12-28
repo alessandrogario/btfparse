@@ -46,6 +46,9 @@ pub use struct_union::*;
 mod func;
 pub use func::*;
 
+mod float;
+pub use float::*;
+
 mod fwd;
 pub use fwd::*;
 
