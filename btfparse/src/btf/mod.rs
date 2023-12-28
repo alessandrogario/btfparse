@@ -43,6 +43,9 @@ pub use struct_union::*;
 mod fwd;
 pub use fwd::*;
 
+mod var;
+pub use var::*;
+
 mod define_type;
 
 mod type_header;
