@@ -1,4 +1,4 @@
-use std::{fs::File, os::unix::fs::FileExt, path::Path};
+use std::{env, fs::File, os::unix::fs::FileExt, path::Path};
 
 use btfparse::{Readable, Result as BTFResult, TypeInformation};
 
@@ -23,6 +23,16 @@ impl Readable for ReadableFile {
 }
 
 fn main() {
-    let vmlinux_btf_file = ReadableFile::new(Path::new("/sys/kernel/btf/vmlinux"));
-    let _type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
+    let argument_list: Vec<String> = env::args().collect();
+    if argument_list.len() != 2 {
+        println!("Usage:\n\tdump-btf /path/to/btf/file\n");
+        return;
+    }
+
+    let btf_file_path = Path::new(&argument_list[1]);
+    println!("Opening BTF file: {:?}", btf_file_path);
+
+    let vmlinux_btf_file = ReadableFile::new(btf_file_path);
+    let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
+    println!("{:?}", type_information.type_map());
 }
