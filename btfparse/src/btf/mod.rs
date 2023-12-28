@@ -43,6 +43,9 @@ pub use func_proto::*;
 mod struct_union;
 pub use struct_union::*;
 
+mod func;
+pub use func::*;
+
 mod fwd;
 pub use fwd::*;
 
