@@ -1,7 +1,7 @@
 use crate::btf::{
     Array, Const, DataSec, Enum, Enum64, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader,
     Float, Func, FuncProto, Fwd, Int, Kind, Ptr, Readable, Restrict, Result as BTFResult, Struct,
-    Type, TypeHeader, Typedef, Union, Var, Volatile,
+    Type, TypeHeader, TypeTag, Typedef, Union, Var, Volatile,
 };
 use crate::generate_constructor_dispatcher;
 use crate::utils::Reader;
@@ -61,6 +61,9 @@ pub enum TypeVariant {
 
     /// A data section decl
     DataSec(DataSec),
+
+    /// A type tag
+    TypeTag(TypeTag),
 }
 
 /// Returns the name of the given type
@@ -77,6 +80,7 @@ fn get_type_enum_value_name(type_var: &TypeVariant) -> Option<String> {
         TypeVariant::Func(func) => func.name(),
         TypeVariant::Float(float) => float.name(),
         TypeVariant::DataSec(data_sec) => data_sec.name(),
+        TypeVariant::TypeTag(type_tag) => type_tag.name(),
 
         TypeVariant::Ptr(_)
         | TypeVariant::Const(_)
@@ -101,7 +105,7 @@ pub struct TypeInformation {
 
 generate_constructor_dispatcher!(
     Int, Typedef, Enum, Ptr, Const, Volatile, Array, FuncProto, Struct, Union, Fwd, Var, Enum64,
-    Func, Float, Restrict, DataSec
+    Func, Float, Restrict, DataSec, TypeTag
 );
 
 impl TypeInformation {

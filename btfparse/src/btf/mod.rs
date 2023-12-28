@@ -55,6 +55,9 @@ pub use data_sec::*;
 mod float;
 pub use float::*;
 
+mod type_tag;
+pub use type_tag::*;
+
 mod fwd;
 pub use fwd::*;
 
