@@ -49,6 +49,9 @@ pub use struct_union::*;
 mod func;
 pub use func::*;
 
+mod data_sec;
+pub use data_sec::*;
+
 mod float;
 pub use float::*;
 
