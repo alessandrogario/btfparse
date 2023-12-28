@@ -19,6 +19,9 @@ pub use typedef::*;
 mod r#enum;
 pub use r#enum::*;
 
+mod enum64;
+pub use enum64::*;
+
 mod ptr;
 pub use ptr::*;
 

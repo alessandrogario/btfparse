@@ -1,7 +1,7 @@
 use crate::btf::{
-    Array, Const, Enum, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, FuncProto, Fwd,
-    Int, Kind, Ptr, Readable, Result as BTFResult, Struct, Type, TypeHeader, Typedef, Union, Var,
-    Volatile,
+    Array, Const, Enum, Enum64, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader,
+    FuncProto, Fwd, Int, Kind, Ptr, Readable, Result as BTFResult, Struct, Type, TypeHeader,
+    Typedef, Union, Var, Volatile,
 };
 use crate::generate_constructor_dispatcher;
 use crate::utils::Reader;
@@ -46,6 +46,9 @@ pub enum TypeVariant {
 
     /// A variable declaration
     Var(Var),
+
+    /// A 64-bit enum type
+    Enum64(Enum64),
 }
 
 /// Returns the name of the given type
@@ -58,6 +61,7 @@ fn get_type_enum_value_name(type_var: &TypeVariant) -> Option<String> {
         TypeVariant::Union(r#union) => r#union.name(),
         TypeVariant::Fwd(fwd) => fwd.name(),
         TypeVariant::Var(var) => var.name(),
+        TypeVariant::Enum64(enum64) => enum64.name(),
 
         TypeVariant::Ptr(_)
         | TypeVariant::Const(_)
@@ -80,7 +84,7 @@ pub struct TypeInformation {
 }
 
 generate_constructor_dispatcher!(
-    Int, Typedef, Enum, Ptr, Const, Volatile, Array, FuncProto, Struct, Union, Fwd, Var
+    Int, Typedef, Enum, Ptr, Const, Volatile, Array, FuncProto, Struct, Union, Fwd, Var, Enum64
 );
 
 impl TypeInformation {
