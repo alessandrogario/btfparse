@@ -37,6 +37,9 @@ pub use array::*;
 mod func_proto;
 pub use func_proto::*;
 
+mod struct_union;
+pub use struct_union::*;
+
 mod define_type;
 
 mod type_header;
