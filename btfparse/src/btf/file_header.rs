@@ -8,7 +8,7 @@ const BTF_LITTLE_ENDIAN_MAGIC: u16 = 0xEB9F;
 const BTF_BIG_ENDIAN_MAGIC: u16 = 0x9FEB;
 
 /// BTF header
-pub struct BTFHeader {
+pub struct FileHeader {
     /// BTF version
     version: u8,
 
@@ -31,13 +31,13 @@ pub struct BTFHeader {
     str_len: u32,
 }
 
-impl BTFHeader {
-    /// Creates a new `BTFHeader` instance
+impl FileHeader {
+    /// Creates a new `FileHeader` instance
     pub fn new(reader: &mut Reader) -> BTFResult<Self> {
         reader.set_offset(0);
         Self::detect_endianness(reader)?;
 
-        Ok(BTFHeader {
+        Ok(FileHeader {
             version: reader.u8()?,
             flags: reader.u8()?,
             hdr_len: reader.u32()?,
@@ -106,7 +106,7 @@ impl BTFHeader {
 
 #[cfg(test)]
 mod tests {
-    use super::BTFHeader;
+    use super::FileHeader;
     use crate::utils::{Endianness, ReadableBuffer, Reader};
 
     #[test]
@@ -123,7 +123,7 @@ mod tests {
         ]);
 
         let mut reader = Reader::new(&readable_buffer);
-        let btf_header = BTFHeader::new(&mut reader).unwrap();
+        let btf_header = FileHeader::new(&mut reader).unwrap();
 
         assert_eq!(reader.endianness(), Endianness::Little);
         assert_eq!(btf_header.version(), 1);
@@ -149,7 +149,7 @@ mod tests {
         ]);
 
         let mut reader = Reader::new(&readable_buffer);
-        let btf_header = BTFHeader::new(&mut reader).unwrap();
+        let btf_header = FileHeader::new(&mut reader).unwrap();
 
         assert_eq!(reader.endianness(), Endianness::Big);
         assert_eq!(btf_header.version(), 1);

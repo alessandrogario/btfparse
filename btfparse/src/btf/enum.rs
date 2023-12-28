@@ -1,12 +1,15 @@
-use crate::btf::parser::{parse_string, BTFHeader, TypeHeader, TypeKind};
-use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResult};
+use crate::btf::{
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
+    Result as BTFResult, Type, TypeHeader,
+};
 use crate::utils::Reader;
+use crate::{define_common_type_methods, define_type};
 
 /// The size of the extra data (one per enum value)
 const ENUM_VALUE_SIZE: usize = 8;
 
 /// Represents an enum value
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntegerValue {
     /// The signed value
     Signed(i32),
@@ -16,6 +19,7 @@ pub enum IntegerValue {
 }
 
 /// Represents a single enum value
+#[derive(Debug, Clone)]
 pub struct NamedValue {
     /// The name of the value
     pub name: String,
@@ -27,67 +31,30 @@ pub struct NamedValue {
 /// Represents a list of enum values
 pub type NamedValueList = Vec<NamedValue>;
 
-/// Represents an enum BTF type
-pub struct Enum32 {
-    /// The name of the type
-    name: String,
-
-    /// Whether the enum is signed or not
-    signed: bool,
-
-    /// The size of the type
-    size: usize,
-
-    /// The list of enum values
+/// The extra data contained in an enum type
+#[derive(Debug, Clone)]
+pub struct Data {
     named_value_list: NamedValueList,
 }
 
-impl Enum32 {
-    /// Creates a new int type
+impl Data {
+    /// The size of the extra data
+    pub fn size(type_header: &TypeHeader) -> usize {
+        type_header.vlen() * ENUM_VALUE_SIZE
+    }
+
+    /// Creates a new `Data` object
     pub fn new(
         reader: &mut Reader,
-        btf_header: &BTFHeader,
+        file_header: &FileHeader,
         type_header: &TypeHeader,
     ) -> BTFResult<Self> {
-        let type_section_start = btf_header.hdr_len() + btf_header.type_off();
-        let type_section_end = type_section_start + btf_header.type_len();
-
-        let value_count = type_header.vlen();
-        let required_size = value_count * ENUM_VALUE_SIZE;
-
-        if reader.offset() + required_size > type_section_end as usize {
-            return Err(BTFError::new(
-                BTFErrorKind::InvalidTypeSectionOffset,
-                "Invalid type section offset",
-            ));
-        }
-
-        if type_header.kind() != TypeKind::Enum {
-            return Err(BTFError::new(
-                BTFErrorKind::InvalidBTFKind,
-                "Not an enum type",
-            ));
-        }
-
-        match type_header.size_or_type() {
-            1 | 2 | 4 | 8 => {}
-            _ => {
-                return Err(BTFError::new(
-                    BTFErrorKind::InvalidTypeHeaderAttribute,
-                    "Invalid size_or_type attribute for enum type",
-                ));
-            }
-        }
-
-        let name = parse_string(reader, btf_header, type_header.name_offset())?;
         let signed = type_header.kind_flag();
-        let size = type_header.size_or_type() as usize;
-
         let mut named_value_list = NamedValueList::new();
 
-        for _ in 0..value_count {
+        for _ in 0..type_header.vlen() {
             let name_offset = reader.u32()?;
-            let value_name = parse_string(reader, btf_header, name_offset)?;
+            let value_name = parse_string(reader, file_header, name_offset)?;
 
             let value = match signed {
                 true => IntegerValue::Signed(reader.i32()?),
@@ -100,39 +67,47 @@ impl Enum32 {
             });
         }
 
-        Ok(Enum32 {
-            name,
-            signed,
-            size,
-            named_value_list,
-        })
+        Ok(Self { named_value_list })
     }
 
-    /// Returns the type name
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    /// Returns the type size
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
-    /// Returns whether the enum is signed or not
-    pub fn signed(&self) -> bool {
-        self.signed
-    }
-
-    /// Returns the enum value list
-    pub fn enum_value_list(&self) -> &NamedValueList {
+    /// Returns the list of enum values
+    pub fn value_list(&self) -> &NamedValueList {
         &self.named_value_list
+    }
+
+    /// Returns a list of integer values matching the specified name
+    pub fn value(&self, name: &str) -> Vec<&IntegerValue> {
+        let mut value_list = Vec::<&IntegerValue>::new();
+
+        for named_value in &self.named_value_list {
+            if named_value.name == name {
+                value_list.push(&named_value.value);
+            }
+        }
+
+        value_list
+    }
+
+    /// Returns a list of names matching the specified integer value
+    pub fn name(&self, value: &IntegerValue) -> Vec<String> {
+        let mut name_list = Vec::<String>::new();
+
+        for named_value in &self.named_value_list {
+            if &named_value.value == value {
+                name_list.push(named_value.name.clone());
+            }
+        }
+
+        name_list
     }
 }
 
+define_type!(Enum, Data);
+
 #[cfg(test)]
 mod tests {
-    use super::Enum32;
-    use crate::btf::parser::{BTFHeader, IntegerValue, TypeHeader};
+    use super::Enum;
+    use crate::btf::{FileHeader, IntegerValue, Type, TypeHeader};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -170,23 +145,23 @@ mod tests {
         ]);
 
         let mut reader = Reader::new(&readable_buffer);
-        let btf_header = BTFHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &btf_header).unwrap();
-        let enum32 = Enum32::new(&mut reader, &btf_header, &type_header).unwrap();
-        assert_eq!(enum32.size(), 4);
-        assert!(!enum32.signed());
-        assert_eq!(enum32.name(), "State");
+        let file_header = FileHeader::new(&mut reader).unwrap();
+        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let r#enum = Enum::new(&mut reader, &file_header, type_header).unwrap();
+        assert_eq!(r#enum.size_or_type(), 4);
+        assert!(!r#enum.kind_flag());
+        assert_eq!(r#enum.name().as_deref(), Some("State"));
 
-        assert_eq!(enum32.enum_value_list().len(), 2);
-        assert_eq!(enum32.enum_value_list()[0].name, "Paused");
+        assert_eq!(r#enum.data().value_list().len(), 2);
+        assert_eq!(r#enum.data().value_list()[0].name, "Paused");
         assert_eq!(
-            enum32.enum_value_list()[0].value,
+            r#enum.data().value_list()[0].value,
             IntegerValue::Unsigned(254)
         );
 
-        assert_eq!(enum32.enum_value_list()[1].name, "Running");
+        assert_eq!(r#enum.data().value_list()[1].name, "Running");
         assert_eq!(
-            enum32.enum_value_list()[1].value,
+            r#enum.data().value_list()[1].value,
             IntegerValue::Unsigned(254)
         );
     }
@@ -226,18 +201,24 @@ mod tests {
         ]);
 
         let mut reader = Reader::new(&readable_buffer);
-        let btf_header = BTFHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &btf_header).unwrap();
-        let enum32 = Enum32::new(&mut reader, &btf_header, &type_header).unwrap();
-        assert_eq!(enum32.size(), 4);
-        assert!(enum32.signed());
-        assert_eq!(enum32.name(), "State");
+        let file_header = FileHeader::new(&mut reader).unwrap();
+        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let r#enum = Enum::new(&mut reader, &file_header, type_header).unwrap();
+        assert_eq!(r#enum.size_or_type(), 4);
+        assert!(r#enum.kind_flag());
+        assert_eq!(r#enum.name().as_deref(), Some("State"));
 
-        assert_eq!(enum32.enum_value_list().len(), 2);
-        assert_eq!(enum32.enum_value_list()[0].name, "Paused");
-        assert_eq!(enum32.enum_value_list()[0].value, IntegerValue::Signed(254));
+        assert_eq!(r#enum.data().value_list().len(), 2);
+        assert_eq!(r#enum.data().value_list()[0].name, "Paused");
+        assert_eq!(
+            r#enum.data().value_list()[0].value,
+            IntegerValue::Signed(254)
+        );
 
-        assert_eq!(enum32.enum_value_list()[1].name, "Running");
-        assert_eq!(enum32.enum_value_list()[1].value, IntegerValue::Signed(254));
+        assert_eq!(r#enum.data().value_list()[1].name, "Running");
+        assert_eq!(
+            r#enum.data().value_list()[1].value,
+            IntegerValue::Signed(254)
+        );
     }
 }

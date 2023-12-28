@@ -1,14 +1,16 @@
-use crate::btf::parser::{BTFHeader, TypeKind};
-use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResult};
+use crate::btf::{
+    Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind, Result as BTFResult,
+};
 use crate::utils::Reader;
 
 /// Type header size
 const TYPE_HEADER_SIZE: usize = 12;
 
 /// Common type header
+#[derive(Debug, Clone, Copy)]
 pub struct TypeHeader {
     /// Type kind
-    kind: TypeKind,
+    kind: Kind,
 
     /// Offset of the type name
     name_offset: u32,
@@ -25,7 +27,7 @@ pub struct TypeHeader {
 
 impl TypeHeader {
     /// Creates a new `TypeHeader` instance
-    pub fn new(reader: &mut Reader, btf_header: &BTFHeader) -> BTFResult<TypeHeader> {
+    pub fn new(reader: &mut Reader, btf_header: &FileHeader) -> BTFResult<TypeHeader> {
         let type_section_start = btf_header.hdr_len() + btf_header.type_off();
         let type_section_end = type_section_start + btf_header.type_len();
 
@@ -39,12 +41,12 @@ impl TypeHeader {
         let name_offset = reader.u32()?;
         let info_flags = reader.u32()?;
         let vlen = (info_flags & 0xFFFF) as usize;
-        let type_kind = TypeKind::new((info_flags & 0x1F000000) >> 24)?;
+        let kind = Kind::new((info_flags & 0x1F000000) >> 24)?;
         let kind_flag = (info_flags & 0x80000000) != 0;
         let size_or_type = reader.u32()?;
 
         Ok(TypeHeader {
-            kind: type_kind,
+            kind,
             name_offset,
             vlen,
             kind_flag,
@@ -53,7 +55,7 @@ impl TypeHeader {
     }
 
     /// Returns the raw `kind` value
-    pub fn kind(&self) -> TypeKind {
+    pub fn kind(&self) -> Kind {
         self.kind
     }
 
@@ -81,7 +83,7 @@ impl TypeHeader {
 #[cfg(test)]
 mod tests {
     use super::TypeHeader;
-    use crate::btf::parser::{BTFHeader, TypeKind};
+    use crate::btf::{FileHeader, Kind};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -107,10 +109,10 @@ mod tests {
         ]);
 
         let mut reader = Reader::new(&readable_buffer);
-        let btf_header = BTFHeader::new(&mut reader).unwrap();
+        let btf_header = FileHeader::new(&mut reader).unwrap();
         let type_header = TypeHeader::new(&mut reader, &btf_header).unwrap();
 
-        assert_eq!(type_header.kind(), TypeKind::Int);
+        assert_eq!(type_header.kind(), Kind::Int);
         assert_eq!(type_header.name_offset(), 1);
         assert_eq!(type_header.vlen(), 255);
         assert!(type_header.kind_flag());

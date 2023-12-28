@@ -1,15 +1,14 @@
-use crate::btf::parser::BTFHeader;
-use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResult};
+use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Result as BTFResult};
 use crate::utils::Reader;
 
 /// Returns the string at offset `string_offset`
 pub fn parse_string(
     reader: &mut Reader,
-    btf_header: &BTFHeader,
+    file_header: &FileHeader,
     string_offset: u32,
 ) -> BTFResult<String> {
-    let string_section_start = btf_header.hdr_len() + btf_header.str_off();
-    let string_section_end = string_section_start + btf_header.str_len();
+    let string_section_start = file_header.hdr_len() + file_header.str_off();
+    let string_section_end = string_section_start + file_header.str_len();
 
     let string_offset = string_section_start + string_offset;
     if string_offset >= string_section_end {
@@ -52,7 +51,7 @@ pub fn parse_string(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_string, BTFHeader};
+    use super::{parse_string, FileHeader};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -82,17 +81,17 @@ mod tests {
         ]);
 
         let mut reader = Reader::new(&readable_buffer);
-        let btf_header = BTFHeader::new(&mut reader).unwrap();
+        let file_header = FileHeader::new(&mut reader).unwrap();
 
-        let null_string = parse_string(&mut reader, &btf_header, 0).unwrap();
+        let null_string = parse_string(&mut reader, &file_header, 0).unwrap();
         assert!(null_string.is_empty());
 
-        let valid_string = parse_string(&mut reader, &btf_header, 1).unwrap();
+        let valid_string = parse_string(&mut reader, &file_header, 1).unwrap();
         assert_eq!(valid_string, "ABCD");
 
-        let valid_string = parse_string(&mut reader, &btf_header, 6).unwrap();
+        let valid_string = parse_string(&mut reader, &file_header, 6).unwrap();
         assert_eq!(valid_string, "EFGH");
 
-        assert!(parse_string(&mut reader, &btf_header, 11).is_err());
+        assert!(parse_string(&mut reader, &file_header, 11).is_err());
     }
 }

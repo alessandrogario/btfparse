@@ -2,7 +2,7 @@ use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResu
 
 /// A BTF type kind
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeKind {
+pub enum Kind {
     /// Integer
     Int = 1,
 
@@ -61,29 +61,29 @@ pub enum TypeKind {
     Enum64 = 19,
 }
 
-impl TypeKind {
+impl Kind {
     /// Converts a `u32` into a `TypeKind` value
-    pub fn new(value: u32) -> BTFResult<TypeKind> {
+    pub fn new(value: u32) -> BTFResult<Kind> {
         match value {
-            1 => Ok(TypeKind::Int),
-            2 => Ok(TypeKind::Ptr),
-            3 => Ok(TypeKind::Array),
-            4 => Ok(TypeKind::Struct),
-            5 => Ok(TypeKind::Union),
-            6 => Ok(TypeKind::Enum),
-            7 => Ok(TypeKind::Fwd),
-            8 => Ok(TypeKind::Typedef),
-            9 => Ok(TypeKind::Volatile),
-            10 => Ok(TypeKind::Const),
-            11 => Ok(TypeKind::Restrict),
-            12 => Ok(TypeKind::Func),
-            13 => Ok(TypeKind::FuncProto),
-            14 => Ok(TypeKind::Var),
-            15 => Ok(TypeKind::DataSec),
-            16 => Ok(TypeKind::Float),
-            17 => Ok(TypeKind::DeclTag),
-            18 => Ok(TypeKind::TypeTag),
-            19 => Ok(TypeKind::Enum64),
+            1 => Ok(Kind::Int),
+            2 => Ok(Kind::Ptr),
+            3 => Ok(Kind::Array),
+            4 => Ok(Kind::Struct),
+            5 => Ok(Kind::Union),
+            6 => Ok(Kind::Enum),
+            7 => Ok(Kind::Fwd),
+            8 => Ok(Kind::Typedef),
+            9 => Ok(Kind::Volatile),
+            10 => Ok(Kind::Const),
+            11 => Ok(Kind::Restrict),
+            12 => Ok(Kind::Func),
+            13 => Ok(Kind::FuncProto),
+            14 => Ok(Kind::Var),
+            15 => Ok(Kind::DataSec),
+            16 => Ok(Kind::Float),
+            17 => Ok(Kind::DeclTag),
+            18 => Ok(Kind::TypeTag),
+            19 => Ok(Kind::Enum64),
 
             _ => Err(BTFError::new(
                 BTFErrorKind::InvalidBTFKind,
@@ -95,12 +95,12 @@ impl TypeKind {
 
 #[cfg(test)]
 mod tests {
-    use super::TypeKind;
+    use super::Kind;
 
     #[test]
     fn test_type_kind() {
         for i in 0..=20 {
-            let type_kind_res = TypeKind::new(i);
+            let type_kind_res = Kind::new(i);
             assert_eq!(type_kind_res.is_err(), i == 0 || i == 20);
         }
     }
