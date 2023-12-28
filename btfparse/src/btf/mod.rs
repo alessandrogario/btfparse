@@ -31,6 +31,9 @@ pub use r#const::*;
 mod volatile;
 pub use volatile::*;
 
+mod restrict;
+pub use restrict::*;
+
 mod r#type;
 pub use r#type::*;
 
