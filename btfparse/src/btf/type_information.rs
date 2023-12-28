@@ -1,6 +1,7 @@
 use crate::btf::{
-    Array, Const, Enum, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, FuncProto, Int,
-    Kind, Ptr, Readable, Result as BTFResult, Struct, Type, TypeHeader, Typedef, Union, Volatile,
+    Array, Const, Enum, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, FuncProto, Fwd,
+    Int, Kind, Ptr, Readable, Result as BTFResult, Struct, Type, TypeHeader, Typedef, Union,
+    Volatile,
 };
 use crate::generate_constructor_dispatcher;
 use crate::utils::Reader;
@@ -39,6 +40,9 @@ pub enum TypeVariant {
 
     /// A union type
     Union(Union),
+
+    /// A forward declaration type
+    Fwd(Fwd),
 }
 
 /// Returns the name of the given type
@@ -49,6 +53,7 @@ fn get_type_enum_value_name(type_var: &TypeVariant) -> Option<String> {
         TypeVariant::Enum(r#enum) => r#enum.name(),
         TypeVariant::Struct(r#struct) => r#struct.name(),
         TypeVariant::Union(r#union) => r#union.name(),
+        TypeVariant::Fwd(fwd) => fwd.name(),
 
         TypeVariant::Ptr(_)
         | TypeVariant::Const(_)
@@ -71,7 +76,7 @@ pub struct TypeInformation {
 }
 
 generate_constructor_dispatcher!(
-    Int, Typedef, Enum, Ptr, Const, Volatile, Array, FuncProto, Struct, Union
+    Int, Typedef, Enum, Ptr, Const, Volatile, Array, FuncProto, Struct, Union, Fwd
 );
 
 impl TypeInformation {

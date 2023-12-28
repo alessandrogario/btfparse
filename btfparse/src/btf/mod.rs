@@ -40,6 +40,9 @@ pub use func_proto::*;
 mod struct_union;
 pub use struct_union::*;
 
+mod fwd;
+pub use fwd::*;
+
 mod define_type;
 
 mod type_header;
