@@ -2,26 +2,32 @@
 macro_rules! define_common_type_methods {
     ($name:ident) => {
         impl Type for $name {
+            /// Returns the type name
             fn name(&self) -> Option<String> {
                 self.name.clone()
             }
 
+            /// Returns the raw string section offset
             fn name_offset(&self) -> u32 {
                 self.type_header.name_offset()
             }
 
+            /// Returns the `vlen` field of the type header
             fn vlen(&self) -> usize {
                 self.type_header.vlen()
             }
 
+            /// Returns the type kind
             fn kind(&self) -> Kind {
                 self.type_header.kind()
             }
 
+            /// Returns the `kind_flag` field of the type header
             fn kind_flag(&self) -> bool {
                 self.type_header.kind_flag()
             }
 
+            /// Returns the `size_or_type` field of the type header
             fn size_or_type(&self) -> u32 {
                 self.type_header.size_or_type()
             }
@@ -32,6 +38,7 @@ macro_rules! define_common_type_methods {
 #[macro_export]
 macro_rules! define_type {
     ($name:ident) => {
+        /// Represents a `$name` type
         #[derive(Debug, Clone)]
         pub struct $name {
             name: Option<String>,
@@ -41,6 +48,7 @@ macro_rules! define_type {
         define_common_type_methods!($name);
 
         impl $name {
+            /// Creates a new `$name` object
             pub fn new(
                 reader: &mut Reader,
                 file_header: &FileHeader,
@@ -73,6 +81,7 @@ macro_rules! define_type {
     };
 
     ($name:ident, $type:ty) => {
+        /// Represents a `$name` type
         #[derive(Debug, Clone)]
         pub struct $name {
             name: Option<String>,
@@ -83,6 +92,7 @@ macro_rules! define_type {
         define_common_type_methods!($name);
 
         impl $name {
+            /// Creates a new `$name` object
             pub fn new(
                 reader: &mut Reader,
                 file_header: &FileHeader,
@@ -138,6 +148,7 @@ macro_rules! define_type {
                 })
             }
 
+            /// Returns the extra data contained in this type
             pub fn data(&self) -> &$type {
                 &self.data
             }
@@ -148,6 +159,7 @@ macro_rules! define_type {
 #[macro_export]
 macro_rules! generate_constructor_dispatcher {
     ($($kind:ident),+) => {
+        /// Creates a new `TypeVariant` object based on the given `TypeHeader::kind()`
         fn parse_type(kind: Kind, reader: &mut Reader, file_header: &FileHeader, type_header: TypeHeader) -> BTFResult<TypeVariant> {
             Ok(match kind {
                 $(
