@@ -123,7 +123,7 @@ impl TypeInformation {
 
         reader.set_offset(type_section_start);
 
-        let mut type_id_generator: u32 = 0;
+        let mut type_id_generator: u32 = 1;
 
         let mut id_to_type_map = BTreeMap::<u32, TypeVariant>::new();
         let mut name_to_id_map = BTreeMap::<String, u32>::new();
