@@ -1,4 +1,8 @@
+mod btf;
 mod utils;
 
-mod btf;
-pub use btf::{Error, ErrorKind, Readable, Result, TypeInformation};
+pub use btf::{
+    Array, Const, DataSec, DeclTag, Enum, Enum64, Error, ErrorKind, Float, Func, FuncProto, Fwd,
+    Int, Kind, Ptr, Readable, Restrict, Result, Struct, Type, TypeInformation, TypeTag,
+    TypeVariant, Typedef, Union, Var, Volatile,
+};
