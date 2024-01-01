@@ -3,6 +3,9 @@ use std::{io, result::Result as StandardResult};
 /// Error kinds used by the `reader` module
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
+    /// An IO error has occurred
+    IOError,
+
     /// The end of the file has been reached
     EOF,
 
@@ -68,7 +71,7 @@ impl From<io::Error> for Error {
     /// Converts an `io::Error` into a reader error
     fn from(error: io::Error) -> Self {
         Error {
-            kind: ErrorKind::EOF,
+            kind: ErrorKind::IOError,
             message: error.to_string(),
         }
     }
