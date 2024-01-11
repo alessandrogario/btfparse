@@ -32,6 +32,12 @@ pub enum ErrorKind {
 
     /// Invalid type section offset
     InvalidTypeSectionOffset,
+
+    /// The given type path is invalid
+    InvalidTypePath,
+
+    /// Invalid type id
+    InvalidTypeID,
 }
 
 /// An error type for the `reader` module
