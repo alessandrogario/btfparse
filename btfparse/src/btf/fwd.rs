@@ -1,16 +1,57 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 
-define_type!(Fwd);
+/// Fwd data
+#[derive(Debug, Clone)]
+pub struct Data {
+    /// The fwd type name
+    name: Option<String>,
+
+    /// The forwarded type id
+    type_id: u32,
+}
+
+impl Data {
+    /// The size of the extra data
+    pub fn size(_type_header: &Header) -> usize {
+        0
+    }
+
+    /// Creates a new `Data` object
+    pub fn new(
+        reader: &mut Reader,
+        file_header: &FileHeader,
+        type_header: &Header,
+    ) -> BTFResult<Self> {
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            name,
+            type_id: type_header.size_or_type(),
+        })
+    }
+}
+
+define_type!(Fwd, Data,
+    name: Option<String>,
+    type_id: u32);
 
 #[cfg(test)]
 mod tests {
     use super::Fwd;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -42,7 +83,7 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let fwd = Fwd::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(fwd.name().as_deref(), Some("exit"));
     }

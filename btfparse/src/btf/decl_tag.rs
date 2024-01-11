@@ -1,46 +1,60 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 
-/// The extra data contained in a DeclTag type
-#[derive(Debug, Clone, Copy)]
+/// DeclTag data
+#[derive(Debug, Clone)]
 pub struct Data {
+    /// Decl tag name
+    name: Option<String>,
+
     /// Component index
     component_index: u32,
 }
 
 impl Data {
     /// The size of the extra data
-    pub fn size(_type_header: &TypeHeader) -> usize {
+    pub fn size(_type_header: &Header) -> usize {
         4
     }
 
     /// Creates a new `Data` object
     pub fn new(
         reader: &mut Reader,
-        _file_header: &FileHeader,
-        _type_header: &TypeHeader,
+        file_header: &FileHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let component_index = reader.u32()?;
 
-        Ok(Self { component_index })
-    }
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
 
-    /// Returns the component index
-    pub fn component_index(&self) -> u32 {
-        self.component_index
+        Ok(Self {
+            name,
+            component_index,
+        })
     }
 }
 
-define_type!(DeclTag, Data);
+define_type!(DeclTag, Data,
+    name: Option<String>,
+    component_index: u32
+);
 
 #[cfg(test)]
 mod tests {
     use super::DeclTag;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -74,9 +88,9 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let decl_tag = DeclTag::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(decl_tag.data().component_index(), 16);
+        assert_eq!(*decl_tag.component_index(), 16);
         assert_eq!(decl_tag.name().as_deref(), Some("decl_tag"));
     }
 }

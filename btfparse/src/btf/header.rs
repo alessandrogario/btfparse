@@ -8,7 +8,7 @@ const TYPE_HEADER_SIZE: usize = 12;
 
 /// Common type header
 #[derive(Debug, Clone, Copy)]
-pub struct TypeHeader {
+pub struct Header {
     /// Type kind
     kind: Kind,
 
@@ -25,9 +25,9 @@ pub struct TypeHeader {
     size_or_type: u32,
 }
 
-impl TypeHeader {
+impl Header {
     /// Creates a new `TypeHeader` instance
-    pub fn new(reader: &mut Reader, btf_header: &FileHeader) -> BTFResult<TypeHeader> {
+    pub fn new(reader: &mut Reader, btf_header: &FileHeader) -> BTFResult<Header> {
         let type_section_start = btf_header.hdr_len() + btf_header.type_off();
         let type_section_end = type_section_start + btf_header.type_len();
 
@@ -45,7 +45,7 @@ impl TypeHeader {
         let kind_flag = (info_flags & 0x80000000) != 0;
         let size_or_type = reader.u32()?;
 
-        Ok(TypeHeader {
+        Ok(Header {
             kind,
             name_offset,
             vlen,
@@ -82,7 +82,7 @@ impl TypeHeader {
 
 #[cfg(test)]
 mod tests {
-    use super::TypeHeader;
+    use super::Header;
     use crate::btf::{FileHeader, Kind};
     use crate::utils::{ReadableBuffer, Reader};
 
@@ -110,7 +110,7 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let btf_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &btf_header).unwrap();
+        let type_header = Header::new(&mut reader, &btf_header).unwrap();
 
         assert_eq!(type_header.kind(), Kind::Int);
         assert_eq!(type_header.name_offset(), 1);

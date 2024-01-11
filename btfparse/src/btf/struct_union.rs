@@ -1,6 +1,6 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
@@ -49,16 +49,22 @@ impl Member {
 /// A list of struct or union members
 pub type MemberList = Vec<Member>;
 
-/// The extra data contained in an int type
+/// Struct or union data
 #[derive(Debug, Clone)]
 pub struct Data {
+    /// The struct or union name
+    name: Option<String>,
+
+    /// The total size of the structure, in bytes
+    size: usize,
+
     /// The full member list for this struct or union
     member_list: MemberList,
 }
 
 impl Data {
     /// The size of the extra data
-    pub fn size(type_header: &TypeHeader) -> usize {
+    pub fn size(type_header: &Header) -> usize {
         type_header.vlen() * MEMBER_VALUE_SIZE
     }
 
@@ -66,7 +72,7 @@ impl Data {
     pub fn new(
         reader: &mut Reader,
         file_header: &FileHeader,
-        type_header: &TypeHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let mut member_list = MemberList::new();
 
@@ -89,23 +95,33 @@ impl Data {
             });
         }
 
-        Ok(Self { member_list })
-    }
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
 
-    /// Returns full member list
-    pub fn member_list(&self) -> MemberList {
-        self.member_list.clone()
+        Ok(Self {
+            name,
+            size: type_header.size_or_type() as usize,
+            member_list,
+        })
     }
 }
 
-define_type!(Struct, Data);
-define_type!(Union, Data);
+define_type!(Struct, Data, name: Option<String>, size: usize, member_list: MemberList);
+define_type!(Union, Data, name: Option<String>, size: usize, member_list: MemberList);
 
 #[cfg(test)]
 mod tests {
     use super::{Struct, Union};
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
+    use crate::Type;
 
     #[test]
     fn test_struct() {
@@ -146,24 +162,24 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
-        let func_proto_type = Struct::new(&mut reader, &file_header, type_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
+        let struct_type = Struct::new(&mut reader, &file_header, type_header).unwrap();
 
-        assert_eq!(func_proto_type.size_or_type(), 2);
-        assert!(!func_proto_type.kind_flag());
-        assert_eq!(func_proto_type.data().member_list().len(), 2);
+        assert_eq!(*struct_type.size(), 2);
+        assert!(!struct_type.header().kind_flag());
+        assert_eq!(struct_type.member_list().len(), 2);
 
-        assert_eq!(func_proto_type.data().member_list()[0].type_id(), 2);
-        assert_eq!(func_proto_type.data().member_list()[0].offset(), 8);
+        assert_eq!(struct_type.member_list()[0].type_id(), 2);
+        assert_eq!(struct_type.member_list()[0].offset(), 8);
         assert_eq!(
-            func_proto_type.data().member_list()[0].name().as_deref(),
+            struct_type.member_list()[0].name().as_deref(),
             Some("value1")
         );
 
-        assert_eq!(func_proto_type.data().member_list()[1].type_id(), 3);
-        assert_eq!(func_proto_type.data().member_list()[1].offset(), 8);
+        assert_eq!(struct_type.member_list()[1].type_id(), 3);
+        assert_eq!(struct_type.member_list()[1].offset(), 8);
         assert_eq!(
-            func_proto_type.data().member_list()[1].name().as_deref(),
+            struct_type.member_list()[1].name().as_deref(),
             Some("value2")
         );
     }
@@ -207,24 +223,24 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
-        let func_proto_type = Union::new(&mut reader, &file_header, type_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
+        let union_type = Union::new(&mut reader, &file_header, type_header).unwrap();
 
-        assert_eq!(func_proto_type.size_or_type(), 2);
-        assert!(!func_proto_type.kind_flag());
-        assert_eq!(func_proto_type.data().member_list().len(), 2);
+        assert_eq!(*union_type.size(), 2);
+        assert!(!union_type.header().kind_flag());
+        assert_eq!(union_type.member_list().len(), 2);
 
-        assert_eq!(func_proto_type.data().member_list()[0].type_id(), 2);
-        assert_eq!(func_proto_type.data().member_list()[0].offset(), 8);
+        assert_eq!(union_type.member_list()[0].type_id(), 2);
+        assert_eq!(union_type.member_list()[0].offset(), 8);
         assert_eq!(
-            func_proto_type.data().member_list()[0].name().as_deref(),
+            union_type.member_list()[0].name().as_deref(),
             Some("value1")
         );
 
-        assert_eq!(func_proto_type.data().member_list()[1].type_id(), 3);
-        assert_eq!(func_proto_type.data().member_list()[1].offset(), 8);
+        assert_eq!(union_type.member_list()[1].type_id(), 3);
+        assert_eq!(union_type.member_list()[1].offset(), 8);
         assert_eq!(
-            func_proto_type.data().member_list()[1].name().as_deref(),
+            union_type.member_list()[1].name().as_deref(),
             Some("value2")
         );
     }

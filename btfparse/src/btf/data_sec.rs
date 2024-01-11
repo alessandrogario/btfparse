@@ -1,6 +1,6 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
@@ -24,23 +24,30 @@ pub struct Variable {
 /// A list of variables
 pub type VariableList = Vec<Variable>;
 
-/// The extra data contained in an DataSec type
+/// DataSec date
 #[derive(Debug, Clone)]
 pub struct Data {
+    /// The data sec name
+    name: Option<String>,
+
+    /// The data sec size
+    size: usize,
+
+    /// A list of variables defined in this data section
     variable_list: VariableList,
 }
 
 impl Data {
     /// The size of the extra data
-    pub fn size(type_header: &TypeHeader) -> usize {
+    pub fn size(type_header: &Header) -> usize {
         type_header.vlen() * DATA_SEC_VARIABLE_SIZE
     }
 
     /// Creates a new `Data` object
     pub fn new(
         reader: &mut Reader,
-        _file_header: &FileHeader,
-        type_header: &TypeHeader,
+        file_header: &FileHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let mut variable_list = VariableList::new();
 
@@ -54,21 +61,34 @@ impl Data {
             variable_list.push(variable);
         }
 
-        Ok(Self { variable_list })
-    }
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
 
-    /// Returns a list of all the variables defined in this data section
-    pub fn variable_list(&self) -> VariableList {
-        self.variable_list.clone()
+        Ok(Self {
+            name,
+            size: type_header.size_or_type() as usize,
+            variable_list,
+        })
     }
 }
 
-define_type!(DataSec, Data);
+define_type!(DataSec, Data,
+    name: Option<String>,
+    size: usize,
+    variable_list: VariableList
+);
 
 #[cfg(test)]
 mod tests {
     use super::DataSec;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -107,18 +127,18 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let data_sec = DataSec::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(data_sec.name().as_deref(), Some("var_name"));
-        assert_eq!(data_sec.size_or_type(), 4);
+        assert_eq!(*data_sec.size(), 4);
 
-        assert_eq!(data_sec.data().variable_list().len(), 2);
-        assert_eq!(data_sec.data().variable_list()[0].var_decl_id, 5);
-        assert_eq!(data_sec.data().variable_list()[0].offset, 4);
-        assert_eq!(data_sec.data().variable_list()[0].var_size, 8);
+        assert_eq!(data_sec.variable_list().len(), 2);
+        assert_eq!(data_sec.variable_list()[0].var_decl_id, 5);
+        assert_eq!(data_sec.variable_list()[0].offset, 4);
+        assert_eq!(data_sec.variable_list()[0].var_size, 8);
 
-        assert_eq!(data_sec.data().variable_list()[1].var_decl_id, 5);
-        assert_eq!(data_sec.data().variable_list()[1].offset, 8);
-        assert_eq!(data_sec.data().variable_list()[1].var_size, 8);
+        assert_eq!(data_sec.variable_list()[1].var_decl_id, 5);
+        assert_eq!(data_sec.variable_list()[1].offset, 8);
+        assert_eq!(data_sec.variable_list()[1].var_size, 8);
     }
 }

@@ -1,6 +1,6 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
@@ -41,16 +41,19 @@ impl Parameter {
 /// A list of function prototype parameters
 pub type ParameterList = Vec<Parameter>;
 
-/// The extra data contained in an int type
+/// Func proto data
 #[derive(Debug, Clone)]
 pub struct Data {
     /// The full parameter list for this function prototype data
     parameter_list: ParameterList,
+
+    /// Return type id
+    return_type_id: u32,
 }
 
 impl Data {
     /// The size of the extra data
-    pub fn size(type_header: &TypeHeader) -> usize {
+    pub fn size(type_header: &Header) -> usize {
         type_header.vlen() * PARAMETER_VALUE_SIZE
     }
 
@@ -58,7 +61,7 @@ impl Data {
     pub fn new(
         reader: &mut Reader,
         file_header: &FileHeader,
-        type_header: &TypeHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let mut parameter_list = ParameterList::new();
 
@@ -79,21 +82,19 @@ impl Data {
             });
         }
 
-        Ok(Self { parameter_list })
-    }
-
-    /// Returns full parameter list
-    pub fn parameter_list(&self) -> ParameterList {
-        self.parameter_list.clone()
+        Ok(Self {
+            parameter_list,
+            return_type_id: type_header.size_or_type(),
+        })
     }
 }
 
-define_type!(FuncProto, Data);
+define_type!(FuncProto, Data, return_type_id: u32, parameter_list: ParameterList);
 
 #[cfg(test)]
 mod tests {
     use super::FuncProto;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -133,21 +134,21 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let func_proto_type = FuncProto::new(&mut reader, &file_header, type_header).unwrap();
 
-        assert_eq!(func_proto_type.size_or_type(), 5);
-        assert_eq!(func_proto_type.data().parameter_list().len(), 2);
+        assert_eq!(*func_proto_type.return_type_id(), 5);
+        assert_eq!(func_proto_type.parameter_list().len(), 2);
 
-        assert_eq!(func_proto_type.data().parameter_list()[0].type_id(), 2);
+        assert_eq!(func_proto_type.parameter_list()[0].type_id(), 2);
         assert_eq!(
-            func_proto_type.data().parameter_list()[0].name().as_deref(),
+            func_proto_type.parameter_list()[0].name().as_deref(),
             Some("param1")
         );
 
-        assert_eq!(func_proto_type.data().parameter_list()[1].type_id(), 3);
+        assert_eq!(func_proto_type.parameter_list()[1].type_id(), 3);
         assert_eq!(
-            func_proto_type.data().parameter_list()[1].name().as_deref(),
+            func_proto_type.parameter_list()[1].name().as_deref(),
             Some("param2")
         );
     }

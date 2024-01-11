@@ -1,17 +1,55 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 
-define_type!(Typedef);
+/// Typedef data
+#[derive(Debug, Clone)]
+pub struct Data {
+    /// The typedef name
+    name: Option<String>,
+
+    /// The typedef'd type
+    type_id: u32,
+}
+
+impl Data {
+    /// The size of the extra data
+    pub fn size(_type_header: &Header) -> usize {
+        0
+    }
+
+    /// Creates a new `Data` object
+    pub fn new(
+        reader: &mut Reader,
+        file_header: &FileHeader,
+        type_header: &Header,
+    ) -> BTFResult<Self> {
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            name,
+            type_id: type_header.size_or_type(),
+        })
+    }
+}
+
+define_type!(Typedef, Data, type_id: u32, name: Option<String>);
 
 #[cfg(test)]
 mod tests {
     use super::Typedef;
-    use crate::btf::Type;
-    use crate::btf::{FileHeader, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -43,9 +81,9 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let typedef_type = Typedef::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(typedef_type.name().as_deref(), Some("void*"));
-        assert_eq!(typedef_type.size_or_type(), 0);
+        assert_eq!(*typedef_type.type_id(), 0);
     }
 }

@@ -1,6 +1,6 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
@@ -12,9 +12,15 @@ pub enum LinkageType {
     Global,
 }
 
-/// The extra data contained in a var type
-#[derive(Debug, Clone, Copy)]
+/// Var data
+#[derive(Debug, Clone)]
 pub struct Data {
+    /// The var name
+    name: Option<String>,
+
+    /// The type id of the var
+    type_id: u32,
+
     /// The raw linkage field from the type section
     linkage: u32,
 
@@ -24,15 +30,15 @@ pub struct Data {
 
 impl Data {
     /// The size of the extra data
-    pub fn size(_type_header: &TypeHeader) -> usize {
+    pub fn size(_type_header: &Header) -> usize {
         4
     }
 
     /// Creates a new `Data` object
     pub fn new(
         reader: &mut Reader,
-        _file_header: &FileHeader,
-        _type_header: &TypeHeader,
+        file_header: &FileHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let linkage = reader.u32()?;
         let linkage_type = match linkage {
@@ -40,29 +46,36 @@ impl Data {
             _ => LinkageType::Global,
         };
 
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
+
         Ok(Self {
+            name,
+            type_id: type_header.size_or_type(),
             linkage,
             linkage_type,
         })
     }
-
-    /// Returns the raw linkage field in the type section
-    pub fn linkage(&self) -> u32 {
-        self.linkage
-    }
-
-    /// Returns the linkage type
-    pub fn linkage_type(&self) -> LinkageType {
-        self.linkage_type
-    }
 }
 
-define_type!(Var, Data);
+define_type!(Var, Data,
+    name: Option<String>,
+    type_id: u32,
+    linkage: u32,
+    linkage_type: LinkageType
+);
 
 #[cfg(test)]
 mod tests {
     use super::{LinkageType, Var};
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -96,11 +109,11 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let var_type = Var::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(var_type.name().as_deref(), Some("static_var"));
-        assert_eq!(var_type.size_or_type(), 5);
-        assert_eq!(var_type.data().linkage_type(), LinkageType::Global);
-        assert_eq!(var_type.data().linkage(), 0x01);
+        assert_eq!(*var_type.type_id(), 5);
+        assert_eq!(*var_type.linkage_type(), LinkageType::Global);
+        assert_eq!(*var_type.linkage(), 0x01);
     }
 }

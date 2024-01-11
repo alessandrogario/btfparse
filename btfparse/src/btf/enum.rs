@@ -1,6 +1,6 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
@@ -31,15 +31,22 @@ pub struct NamedValue {
 /// Represents a list of enum values
 pub type NamedValueList = Vec<NamedValue>;
 
-/// The extra data contained in an enum type
+/// Enum data
 #[derive(Debug, Clone)]
 pub struct Data {
+    /// The enum type name
+    name: Option<String>,
+
+    /// The enum size, in bytes
+    size: usize,
+
+    /// A list of enum values
     named_value_list: NamedValueList,
 }
 
 impl Data {
     /// The size of the extra data
-    pub fn size(type_header: &TypeHeader) -> usize {
+    pub fn size(type_header: &Header) -> usize {
         type_header.vlen() * ENUM_VALUE_SIZE
     }
 
@@ -47,7 +54,7 @@ impl Data {
     pub fn new(
         reader: &mut Reader,
         file_header: &FileHeader,
-        type_header: &TypeHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let signed = type_header.kind_flag();
         let mut named_value_list = NamedValueList::new();
@@ -67,47 +74,34 @@ impl Data {
             });
         }
 
-        Ok(Self { named_value_list })
-    }
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
 
-    /// Returns the list of enum values
-    pub fn value_list(&self) -> &NamedValueList {
-        &self.named_value_list
-    }
-
-    /// Returns a list of integer values matching the specified name
-    pub fn value(&self, name: &str) -> Vec<&IntegerValue> {
-        let mut value_list = Vec::<&IntegerValue>::new();
-
-        for named_value in &self.named_value_list {
-            if named_value.name == name {
-                value_list.push(&named_value.value);
-            }
-        }
-
-        value_list
-    }
-
-    /// Returns a list of names matching the specified integer value
-    pub fn name(&self, value: &IntegerValue) -> Vec<String> {
-        let mut name_list = Vec::<String>::new();
-
-        for named_value in &self.named_value_list {
-            if &named_value.value == value {
-                name_list.push(named_value.name.clone());
-            }
-        }
-
-        name_list
+        Ok(Self {
+            name,
+            size: type_header.size_or_type() as usize,
+            named_value_list,
+        })
     }
 }
 
-define_type!(Enum, Data);
+define_type!(Enum, Data,
+    name: Option<String>,
+    size: usize,
+    named_value_list: NamedValueList
+);
 
 #[cfg(test)]
 mod tests {
     use super::{Enum, IntegerValue};
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header, Type};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -146,22 +140,22 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let r#enum = Enum::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(r#enum.size_or_type(), 4);
-        assert!(!r#enum.kind_flag());
+        assert_eq!(*r#enum.size(), 4);
+        assert!(!r#enum.header().kind_flag());
         assert_eq!(r#enum.name().as_deref(), Some("State"));
 
-        assert_eq!(r#enum.data().value_list().len(), 2);
-        assert_eq!(r#enum.data().value_list()[0].name, "Paused");
+        assert_eq!(r#enum.named_value_list().len(), 2);
+        assert_eq!(r#enum.named_value_list()[0].name, "Paused");
         assert_eq!(
-            r#enum.data().value_list()[0].value,
+            r#enum.named_value_list()[0].value,
             IntegerValue::Unsigned(254)
         );
 
-        assert_eq!(r#enum.data().value_list()[1].name, "Running");
+        assert_eq!(r#enum.named_value_list()[1].name, "Running");
         assert_eq!(
-            r#enum.data().value_list()[1].value,
+            r#enum.named_value_list()[1].value,
             IntegerValue::Unsigned(254)
         );
     }
@@ -202,22 +196,22 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let r#enum = Enum::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(r#enum.size_or_type(), 4);
-        assert!(r#enum.kind_flag());
+        assert_eq!(*r#enum.size(), 4);
+        assert!(r#enum.header().kind_flag());
         assert_eq!(r#enum.name().as_deref(), Some("State"));
 
-        assert_eq!(r#enum.data().value_list().len(), 2);
-        assert_eq!(r#enum.data().value_list()[0].name, "Paused");
+        assert_eq!(r#enum.named_value_list().len(), 2);
+        assert_eq!(r#enum.named_value_list()[0].name, "Paused");
         assert_eq!(
-            r#enum.data().value_list()[0].value,
+            r#enum.named_value_list()[0].value,
             IntegerValue::Signed(254)
         );
 
-        assert_eq!(r#enum.data().value_list()[1].name, "Running");
+        assert_eq!(r#enum.named_value_list()[1].name, "Running");
         assert_eq!(
-            r#enum.data().value_list()[1].value,
+            r#enum.named_value_list()[1].value,
             IntegerValue::Signed(254)
         );
     }

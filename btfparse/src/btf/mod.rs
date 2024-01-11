@@ -69,8 +69,8 @@ pub use decl_tag::*;
 
 mod define_type;
 
-mod type_header;
-use type_header::*;
+mod header;
+use header::*;
 
 mod file_header;
 use file_header::*;

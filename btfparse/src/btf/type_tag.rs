@@ -1,16 +1,55 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 
-define_type!(TypeTag);
+/// Type tag data
+#[derive(Debug, Clone)]
+pub struct Data {
+    /// The type tag name
+    name: Option<String>,
+
+    /// The type id
+    type_id: u32,
+}
+
+impl Data {
+    /// The size of the extra data
+    pub fn size(_type_header: &Header) -> usize {
+        0
+    }
+
+    /// Creates a new `Data` object
+    pub fn new(
+        reader: &mut Reader,
+        file_header: &FileHeader,
+        type_header: &Header,
+    ) -> BTFResult<Self> {
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            name,
+            type_id: type_header.size_or_type(),
+        })
+    }
+}
+
+define_type!(TypeTag, Data, name: Option<String>, type_id: u32);
 
 #[cfg(test)]
 mod tests {
     use super::TypeTag;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -42,9 +81,9 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let type_tag = TypeTag::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(type_tag.name().as_deref(), Some("int"));
-        assert_eq!(type_tag.size_or_type(), 3);
+        assert_eq!(*type_tag.type_id(), 3);
     }
 }

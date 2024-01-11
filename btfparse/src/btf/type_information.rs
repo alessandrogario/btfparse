@@ -1,18 +1,12 @@
 use crate::btf::{
     Array, Const, DataSec, DeclTag, Enum, Enum64, Error as BTFError, ErrorKind as BTFErrorKind,
-    FileHeader, Float, Func, FuncProto, Fwd, Int, Kind, Ptr, Readable, Restrict,
-    Result as BTFResult, Struct, Type, TypeHeader, TypeTag, Typedef, Union, Var, Volatile,
+    FileHeader, Float, Func, FuncProto, Fwd, Header, Int, Kind, Ptr, Readable, Restrict,
+    Result as BTFResult, Struct, TypeTag, Typedef, Union, Var, Volatile,
 };
 use crate::generate_constructor_dispatcher;
 use crate::utils::Reader;
 
-use std::any::Any;
 use std::collections::BTreeMap;
-use std::mem;
-use std::ops::Index;
-use std::path::Path;
-
-use super::fwd;
 
 /// An enum representing a BTF type
 #[derive(Debug, Clone)]
@@ -82,19 +76,19 @@ pub enum TypeVariant {
 fn get_type_enum_value_name(type_var: &TypeVariant) -> Option<String> {
     match type_var {
         TypeVariant::Void => Some("void".to_string()),
-        TypeVariant::Int(int) => int.name(),
-        TypeVariant::Typedef(typedef) => typedef.name(),
-        TypeVariant::Enum(r#enum) => r#enum.name(),
-        TypeVariant::Struct(r#struct) => r#struct.name(),
-        TypeVariant::Union(r#union) => r#union.name(),
-        TypeVariant::Fwd(fwd) => fwd.name(),
-        TypeVariant::Var(var) => var.name(),
-        TypeVariant::Enum64(enum64) => enum64.name(),
-        TypeVariant::Func(func) => func.name(),
-        TypeVariant::Float(float) => float.name(),
-        TypeVariant::DataSec(data_sec) => data_sec.name(),
-        TypeVariant::TypeTag(type_tag) => type_tag.name(),
-        TypeVariant::DeclTag(decl_tag) => decl_tag.name(),
+        TypeVariant::Int(int) => int.name().clone(),
+        TypeVariant::Typedef(typedef) => typedef.name().clone(),
+        TypeVariant::Enum(r#enum) => r#enum.name().clone(),
+        TypeVariant::Struct(r#struct) => r#struct.name().clone(),
+        TypeVariant::Union(r#union) => r#union.name().clone(),
+        TypeVariant::Fwd(fwd) => fwd.name().clone(),
+        TypeVariant::Var(var) => var.name().clone(),
+        TypeVariant::Enum64(enum64) => enum64.name().clone(),
+        TypeVariant::Func(func) => func.name().clone(),
+        TypeVariant::Float(float) => float.name().clone(),
+        TypeVariant::DataSec(data_sec) => data_sec.name().clone(),
+        TypeVariant::TypeTag(type_tag) => type_tag.name().clone(),
+        TypeVariant::DeclTag(decl_tag) => decl_tag.name().clone(),
 
         TypeVariant::Ptr(_)
         | TypeVariant::Const(_)
@@ -172,7 +166,7 @@ impl TypeInformation {
         let mut id_to_name_map = BTreeMap::<u32, String>::new();
 
         while reader.offset() < type_section_end {
-            let type_header = TypeHeader::new(&mut reader, &file_header)?;
+            let type_header = Header::new(&mut reader, &file_header)?;
             let btf_type = parse_type(type_header.kind(), &mut reader, &file_header, type_header)?;
 
             let type_id = type_id_generator;
@@ -249,7 +243,7 @@ impl TypeInformation {
                 )?;
 
                 let list_head_type_size = match list_head_type_var {
-                    TypeVariant::Struct(str) => Ok(str.size_or_type() as usize),
+                    TypeVariant::Struct(str) => Ok(*str.size()),
 
                     _ => {
                         Err(BTFError::new(BTFErrorKind::InvalidTypeID, "The extracted `struct list_head` type ID, used to extract the pointer size, is not a struct type"))
@@ -260,43 +254,29 @@ impl TypeInformation {
             }
 
             TypeVariant::Array(array) => {
-                let type_id = array.data().element_type_id();
+                let type_id = *array.element_type_id();
                 let element_size = self.type_size(type_id)?;
+                let element_count = *array.element_count() as usize;
 
-                Ok(element_size * array.data().element_count() as usize)
+                Ok(element_size * element_count)
             }
 
-            TypeVariant::Float(float) => Ok(float.size_or_type() as usize),
-            TypeVariant::Int(int) => Ok(int.size_or_type() as usize),
-            TypeVariant::Enum(enm) => Ok(enm.size_or_type() as usize),
-            TypeVariant::Enum64(enm) => Ok(enm.size_or_type() as usize),
-            TypeVariant::Struct(str) => Ok(str.size_or_type() as usize),
-            TypeVariant::Union(str) => Ok(str.size_or_type() as usize),
+            TypeVariant::Float(float) => Ok(*float.size()),
+            TypeVariant::Int(int) => Ok(*int.size()),
+            TypeVariant::Enum(enm) => Ok(*enm.size()),
+            TypeVariant::Enum64(enm) => Ok(*enm.size()),
+            TypeVariant::Struct(str) => Ok(*str.size()),
+            TypeVariant::Union(union) => Ok(*union.size()),
 
-            TypeVariant::Typedef(typedef) => {
-                let type_id = typedef.size_or_type();
-                self.type_size(type_id)
-            }
+            TypeVariant::Typedef(typedef) => self.type_size(*typedef.type_id()),
 
-            TypeVariant::Fwd(fwd) => {
-                let type_id = fwd.size_or_type();
-                self.type_size(type_id)
-            }
+            TypeVariant::Fwd(fwd) => self.type_size(*fwd.type_id()),
 
-            TypeVariant::Const(cnst) => {
-                let type_id = cnst.size_or_type();
-                self.type_size(type_id)
-            }
+            TypeVariant::Const(cnst) => self.type_size(*cnst.type_id()),
 
-            TypeVariant::Volatile(volatile) => {
-                let type_id = volatile.size_or_type();
-                self.type_size(type_id)
-            }
+            TypeVariant::Volatile(volatile) => self.type_size(*volatile.type_id()),
 
-            TypeVariant::Restrict(restrict) => {
-                let type_id = restrict.size_or_type();
-                self.type_size(type_id)
-            }
+            TypeVariant::Restrict(restrict) => self.type_size(*restrict.type_id()),
 
             _ => Err(BTFError::new(
                 BTFErrorKind::InvalidTypeID,
@@ -465,28 +445,23 @@ impl TypeInformation {
             }
 
             TypeVariant::Fwd(fwd) => {
-                let next_type_id = fwd.size_or_type();
-                return self.offset_of_helper(offset, next_type_id, path);
+                return self.offset_of_helper(offset, *fwd.type_id(), path);
             }
 
             TypeVariant::Typedef(typedef) => {
-                let next_type_id = typedef.size_or_type();
-                return self.offset_of_helper(offset, next_type_id, path);
+                return self.offset_of_helper(offset, *typedef.type_id(), path);
             }
 
             TypeVariant::Const(cnst) => {
-                let next_type_id = cnst.size_or_type();
-                return self.offset_of_helper(offset, next_type_id, path);
+                return self.offset_of_helper(offset, *cnst.type_id(), path);
             }
 
             TypeVariant::Volatile(volatile) => {
-                let next_type_id = volatile.size_or_type();
-                return self.offset_of_helper(offset, next_type_id, path);
+                return self.offset_of_helper(offset, *volatile.type_id(), path);
             }
 
             TypeVariant::Restrict(restrict) => {
-                let next_type_id = restrict.size_or_type();
-                return self.offset_of_helper(offset, next_type_id, path);
+                return self.offset_of_helper(offset, *restrict.type_id(), path);
             }
 
             _ => {}
@@ -498,29 +473,31 @@ impl TypeInformation {
 
                 match &type_var {
                     TypeVariant::Array(array) => {
-                        if index >= array.data().element_count() as usize {
+                        let element_count = *array.element_count() as usize;
+                        if index >= element_count {
                             return Err(BTFError::new(
                                 BTFErrorKind::InvalidTypePath,
                                 &format!(
                                     "Index {} is out of bounds for array of size {}",
                                     index,
-                                    array.data().element_count()
+                                    array.element_count()
                                 ),
                             ));
                         }
 
-                        let element_type_size = self.type_size(array.data().element_type_id())?;
+                        let element_type_id = *array.element_type_id();
+                        let element_type_size = self.type_size(element_type_id)?;
                         offset += index * element_type_size;
 
-                        type_id = array.data().element_type_id();
+                        type_id = element_type_id;
                     }
 
                     TypeVariant::Ptr(ptr) => {
-                        let pointee_type = ptr.size_or_type();
-                        let element_type_size = self.type_size(pointee_type)?;
-                        offset += index * element_type_size;
+                        let pointee_type_id = *ptr.type_id();
+                        let element_type_size = self.type_size(pointee_type_id)?;
 
-                        type_id = ptr.size_or_type();
+                        offset += index * element_type_size;
+                        type_id = pointee_type_id;
                     }
 
                     _ => {
@@ -538,7 +515,7 @@ impl TypeInformation {
                         // Attempt to forward the request to any unnamed member (anonymous structs). If this
                         // succeeds, then we can just return the offset we get back, as it will consume the
                         // entire path.
-                        if let Some(offset) = str.data().member_list().iter().find_map(|member| {
+                        if let Some(offset) = str.member_list().iter().find_map(|member| {
                             if member.name().is_none() {
                                 match self.offset_of_helper(offset, member.type_id(), path.clone())
                                 {
@@ -556,7 +533,6 @@ impl TypeInformation {
                         // path component. In this case, we need to consume the path component and
                         // continue the search.
                         let (next_type_id, member_offset) = str
-                            .data()
                             .member_list()
                             .iter()
                             .find_map(|member| {
@@ -586,7 +562,7 @@ impl TypeInformation {
                         // Attempt to forward the request to any unnamed member (anonymous structs). If this
                         // succeeds, then we can just return the offset we get back, as it will consume the
                         // entire path.
-                        if let Some(offset) = union.data().member_list().iter().find_map(|member| {
+                        if let Some(offset) = union.member_list().iter().find_map(|member| {
                             if member.name().is_none() {
                                 match self.offset_of_helper(offset, type_id, path.clone()) {
                                     Ok(offset) => Some(offset),
@@ -603,7 +579,6 @@ impl TypeInformation {
                         // path component. In this case, we need to consume the path component and
                         // continue the search.
                         let (next_type_id, member_offset) = union
-                            .data()
                             .member_list()
                             .iter()
                             .find_map(|member| {

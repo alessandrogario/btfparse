@@ -1,13 +1,19 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    Result as BTFResult, Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 
-/// The extra data contained in an int type
-#[derive(Debug, Clone, Copy)]
+/// Int data
+#[derive(Debug, Clone)]
 pub struct Data {
+    /// The integer name
+    name: Option<String>,
+
+    /// The int type size, in bytes
+    size: usize,
+
     /// Whether the integer is signed
     signed: bool,
 
@@ -26,22 +32,34 @@ pub struct Data {
 
 impl Data {
     /// The size of the extra data
-    pub fn size(_type_header: &TypeHeader) -> usize {
+    pub fn size(_type_header: &Header) -> usize {
         4
     }
 
     /// Creates a new `Data` object
     pub fn new(
         reader: &mut Reader,
-        _file_header: &FileHeader,
-        _type_header: &TypeHeader,
+        file_header: &FileHeader,
+        type_header: &Header,
     ) -> BTFResult<Self> {
         let extra_info = reader.u32()?;
         let encoding = (extra_info & 0x0F000000) >> 24;
         let offset = ((extra_info & 0x00FF0000) >> 16) as usize;
         let bits = (extra_info & 0x000000FF) as usize;
 
+        let name = if type_header.name_offset() != 0 {
+            Some(parse_string(
+                reader,
+                file_header,
+                type_header.name_offset(),
+            )?)
+        } else {
+            None
+        };
+
         Ok(Self {
+            name,
+            size: type_header.size_or_type() as usize,
             signed: (encoding & 1) != 0,
             char: (encoding & 2) != 0,
             boolean: (encoding & 4) != 0,
@@ -49,39 +67,22 @@ impl Data {
             bits,
         })
     }
-
-    /// Returns whether the integer is signed
-    pub fn signed(&self) -> bool {
-        self.signed
-    }
-
-    /// Returns whether the integer is a char
-    pub fn char(&self) -> bool {
-        self.char
-    }
-
-    /// Returns whether the integer is a boolean
-    pub fn boolean(&self) -> bool {
-        self.boolean
-    }
-
-    /// Returns the offset, in bits, of the integer. Used for bitfields
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    /// Returns the number of bits in the integer. Used for bitfields
-    pub fn bits(&self) -> usize {
-        self.bits
-    }
 }
 
-define_type!(Int, Data);
+define_type!(Int, Data,
+    name: Option<String>,
+    size: usize,
+    signed: bool,
+    char: bool,
+    boolean: bool,
+    offset: usize,
+    bits: usize
+);
 
 #[cfg(test)]
 mod tests {
     use super::Int;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -116,15 +117,15 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let int_type = Int::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(int_type.name().as_deref(), Some("unsigned int"));
-        assert_eq!(int_type.size_or_type(), 4);
-        assert!(!int_type.data().signed());
-        assert!(!int_type.data().boolean());
-        assert!(!int_type.data().char());
-        assert_eq!(int_type.data().offset(), 8);
-        assert_eq!(int_type.data().bits(), 16);
+        assert_eq!(*int_type.size(), 4);
+        assert!(!int_type.signed());
+        assert!(!int_type.boolean());
+        assert!(!int_type.char());
+        assert_eq!(*int_type.offset(), 8);
+        assert_eq!(*int_type.bits(), 16);
     }
 
     #[test]
@@ -158,15 +159,15 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let int_type = Int::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(int_type.name().as_deref(), Some("char"));
-        assert_eq!(int_type.size_or_type(), 1);
-        assert!(!int_type.data().signed());
-        assert!(!int_type.data().boolean());
-        assert!(int_type.data().char());
-        assert_eq!(int_type.data().offset(), 0);
-        assert_eq!(int_type.data().bits(), 8);
+        assert_eq!(*int_type.size(), 1);
+        assert!(!int_type.signed());
+        assert!(!int_type.boolean());
+        assert!(*int_type.char());
+        assert_eq!(*int_type.offset(), 0);
+        assert_eq!(*int_type.bits(), 8);
     }
 
     #[test]
@@ -200,15 +201,15 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let int_type = Int::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(int_type.name().as_deref(), Some("int"));
-        assert_eq!(int_type.size_or_type(), 1);
-        assert!(int_type.data().signed());
-        assert!(!int_type.data().boolean());
-        assert!(!int_type.data().char());
-        assert_eq!(int_type.data().offset(), 0);
-        assert_eq!(int_type.data().bits(), 8);
+        assert_eq!(*int_type.size(), 1);
+        assert!(int_type.signed());
+        assert!(!int_type.boolean());
+        assert!(!int_type.char());
+        assert_eq!(*int_type.offset(), 0);
+        assert_eq!(*int_type.bits(), 8);
     }
 
     #[test]
@@ -242,14 +243,14 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let int_type = Int::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(int_type.name().as_deref(), Some("bool"));
-        assert_eq!(int_type.size_or_type(), 1);
-        assert!(!int_type.data().signed());
-        assert!(int_type.data().boolean());
-        assert!(!int_type.data().char());
-        assert_eq!(int_type.data().offset(), 0);
-        assert_eq!(int_type.data().bits(), 8);
+        assert_eq!(*int_type.size(), 1);
+        assert!(!int_type.signed());
+        assert!(int_type.boolean());
+        assert!(!int_type.char());
+        assert_eq!(*int_type.offset(), 0);
+        assert_eq!(*int_type.bits(), 8);
     }
 }

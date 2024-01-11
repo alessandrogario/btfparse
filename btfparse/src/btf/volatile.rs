@@ -1,16 +1,41 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Result as BTFResult,
+    Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
 
-define_type!(Volatile);
+/// Volatile data
+#[derive(Debug, Clone)]
+pub struct Data {
+    /// The volatile type
+    type_id: u32,
+}
+
+impl Data {
+    /// The size of the extra data
+    pub fn size(_type_header: &Header) -> usize {
+        0
+    }
+
+    /// Creates a new `Data` object
+    pub fn new(
+        _reader: &mut Reader,
+        _file_header: &FileHeader,
+        type_header: &Header,
+    ) -> BTFResult<Self> {
+        Ok(Self {
+            type_id: type_header.size_or_type(),
+        })
+    }
+}
+
+define_type!(Volatile, Data, type_id: u32);
 
 #[cfg(test)]
 mod tests {
     use super::Volatile;
-    use crate::btf::{FileHeader, Type, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -41,8 +66,8 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let volatile = Volatile::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(volatile.size_or_type(), 3);
+        assert_eq!(*volatile.type_id(), 3);
     }
 }

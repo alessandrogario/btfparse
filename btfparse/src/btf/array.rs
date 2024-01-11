@@ -1,6 +1,6 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind,
-    Result as BTFResult, Type, TypeHeader,
+    Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Result as BTFResult,
+    Type,
 };
 use crate::utils::Reader;
 use crate::{define_common_type_methods, define_type};
@@ -8,7 +8,7 @@ use crate::{define_common_type_methods, define_type};
 /// The size of the extra data
 const ENUM_VALUE_SIZE: usize = 12;
 
-/// The extra data contained in an array type
+/// Array data
 #[derive(Debug, Clone, Copy)]
 pub struct Data {
     /// The element type id
@@ -23,7 +23,7 @@ pub struct Data {
 
 impl Data {
     /// The size of the extra data
-    pub fn size(type_header: &TypeHeader) -> usize {
+    pub fn size(type_header: &Header) -> usize {
         type_header.vlen() * ENUM_VALUE_SIZE
     }
 
@@ -31,7 +31,7 @@ impl Data {
     pub fn new(
         reader: &mut Reader,
         _file_header: &FileHeader,
-        _type_header: &TypeHeader,
+        _type_header: &Header,
     ) -> BTFResult<Self> {
         let element_type_id = reader.u32()?;
         let index_type_id = reader.u32()?;
@@ -43,29 +43,18 @@ impl Data {
             element_count,
         })
     }
-
-    /// Returns the element type id
-    pub fn element_type_id(&self) -> u32 {
-        self.element_type_id
-    }
-
-    /// Returns the index type id
-    pub fn index_type_id(&self) -> u32 {
-        self.index_type_id
-    }
-
-    /// Returns the element count
-    pub fn element_count(&self) -> u32 {
-        self.element_count
-    }
 }
 
-define_type!(Array, Data);
+define_type!(Array, Data,
+    element_type_id: u32,
+    index_type_id: u32,
+    element_count: u32
+);
 
 #[cfg(test)]
 mod tests {
     use super::Array;
-    use crate::btf::{FileHeader, TypeHeader};
+    use crate::btf::{FileHeader, Header};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
@@ -100,10 +89,10 @@ mod tests {
 
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
-        let type_header = TypeHeader::new(&mut reader, &file_header).unwrap();
+        let type_header = Header::new(&mut reader, &file_header).unwrap();
         let array = Array::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(array.data().element_type_id(), 5);
-        assert_eq!(array.data().index_type_id(), 6);
-        assert_eq!(array.data().element_count(), 7);
+        assert_eq!(*array.element_type_id(), 5);
+        assert_eq!(*array.index_type_id(), 6);
+        assert_eq!(*array.element_count(), 7);
     }
 }
