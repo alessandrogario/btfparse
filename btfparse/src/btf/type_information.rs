@@ -155,9 +155,9 @@ macro_rules! offset_of_struct_and_union_helper {
         // Attempt to forward the request to any unnamed member (anonymous structs). If this
         // succeeds then we can just return the offset we get back, as it will consume the
         // entire path.
-        if let Some(struct_offset) = $struct_or_union.member_list().iter().find_map(|member| {
+        if let Some(final_offset) = $struct_or_union.member_list().iter().find_map(|member| {
             if member.name().is_none() {
-                match $self.offset_of_helper($current_offset, member.type_id(), $path.clone()) {
+                match $self.offset_of_helper($current_offset, member.tid(), $path.clone()) {
                     Ok(inner_member_offset) => Some(member.offset() as usize + inner_member_offset),
                     Err(_) => None,
                 }
@@ -165,18 +165,18 @@ macro_rules! offset_of_struct_and_union_helper {
                 None
             }
         }) {
-            return Ok($current_offset + struct_offset);
+            return Ok($current_offset + final_offset);
         }
 
         // Try again, this time looking for a named member that matches the current
         // path component
-        let (next_type_id, member_offset) = $struct_or_union
+        let (next_tid, member_offset) = $struct_or_union
             .member_list()
             .iter()
             .find_map(|member| {
                 member.name().map(|member_name| {
                     if *$name == member_name {
-                        Some((member.type_id(), member.offset() as usize))
+                        Some((member.tid(), member.offset() as usize))
                     } else {
                         None
                     }
@@ -192,7 +192,7 @@ macro_rules! offset_of_struct_and_union_helper {
                 )
             })?;
 
-        $current_type = next_type_id;
+        $current_type = next_tid;
         $current_offset += member_offset;
     };
 }
@@ -208,7 +208,7 @@ impl TypeInformation {
 
         reader.set_offset(type_section_start);
 
-        let mut type_id_generator: u32 = 1;
+        let mut tid_generator: u32 = 1;
 
         let mut id_to_type_map = BTreeMap::<u32, TypeVariant>::new();
         let mut name_to_id_map = BTreeMap::<String, u32>::new();
@@ -218,15 +218,15 @@ impl TypeInformation {
             let type_header = Header::new(&mut reader, &file_header)?;
             let btf_type = parse_type(type_header.kind(), &mut reader, &file_header, type_header)?;
 
-            let type_id = type_id_generator;
-            type_id_generator += 1;
+            let tid = tid_generator;
+            tid_generator += 1;
 
             if let Some(name) = get_type_enum_value_name(&btf_type) {
-                name_to_id_map.insert(name.to_string(), type_id);
-                id_to_name_map.insert(type_id, name.to_string());
+                name_to_id_map.insert(name.to_string(), tid);
+                id_to_name_map.insert(tid, name.to_string());
             }
 
-            id_to_type_map.insert(type_id, btf_type);
+            id_to_type_map.insert(tid, btf_type);
         }
 
         Ok(Self {
@@ -251,38 +251,38 @@ impl TypeInformation {
     }
 
     /// Returns the type object for the given type id
-    pub fn from_id(&self, type_id: u32) -> Option<TypeVariant> {
-        if type_id == 0 {
+    pub fn from_id(&self, tid: u32) -> Option<TypeVariant> {
+        if tid == 0 {
             return Some(TypeVariant::Void);
         }
 
-        self.id_to_type_map.get(&type_id).cloned()
+        self.id_to_type_map.get(&tid).cloned()
     }
 
     /// Returns the name of the given type id
-    pub fn name_of(&self, type_id: u32) -> Option<String> {
-        if type_id == 0 {
+    pub fn name_of(&self, tid: u32) -> Option<String> {
+        if tid == 0 {
             return Some("void".to_string());
         }
 
-        self.id_to_name_map.get(&type_id).cloned()
+        self.id_to_name_map.get(&tid).cloned()
     }
 
     /// Returns the size of the given type id
-    pub fn size_of(&self, type_id: u32) -> BTFResult<usize> {
-        let type_variant = self.from_id(type_id).ok_or(BTFError::new(
+    pub fn size_of(&self, tid: u32) -> BTFResult<usize> {
+        let type_variant = self.from_id(tid).ok_or(BTFError::new(
             BTFErrorKind::InvalidTypeID,
             "Invalid type id",
         ))?;
 
         match type_variant {
             TypeVariant::Ptr(_) => {
-                let list_head_type_id = self.id_of("list_head").ok_or(BTFError::new(
+                let list_head_tid = self.id_of("list_head").ok_or(BTFError::new(
                     BTFErrorKind::InvalidTypeID,
                     "The `struct list_head` type, used to extract the pointer size, was not found",
                 ))?;
 
-                let list_head_type_var = self.from_id(list_head_type_id).ok_or(
+                let list_head_type_var = self.from_id(list_head_tid).ok_or(
                     BTFError::new(BTFErrorKind::InvalidTypeID, "The extracted `struct list_head` type ID, used to extract the pointer size, was invalid"),
                 )?;
 
@@ -298,8 +298,8 @@ impl TypeInformation {
             }
 
             TypeVariant::Array(array) => {
-                let type_id = *array.element_type_id();
-                let element_size = self.size_of(type_id)?;
+                let tid = *array.element_tid();
+                let element_size = self.size_of(tid)?;
                 let element_count = *array.element_count() as usize;
 
                 Ok(element_size * element_count)
@@ -313,12 +313,12 @@ impl TypeInformation {
             TypeVariant::Union(union) => Ok(*union.size()),
             TypeVariant::DataSec(data_sec) => Ok(*data_sec.size()),
 
-            TypeVariant::Var(var) => self.size_of(*var.type_id()),
-            TypeVariant::Typedef(typedef) => self.size_of(*typedef.type_id()),
-            TypeVariant::Const(cnst) => self.size_of(*cnst.type_id()),
-            TypeVariant::Volatile(volatile) => self.size_of(*volatile.type_id()),
-            TypeVariant::Restrict(restrict) => self.size_of(*restrict.type_id()),
-            TypeVariant::TypeTag(type_tag) => self.size_of(*type_tag.type_id()),
+            TypeVariant::Var(var) => self.size_of(*var.tid()),
+            TypeVariant::Typedef(typedef) => self.size_of(*typedef.tid()),
+            TypeVariant::Const(cnst) => self.size_of(*cnst.tid()),
+            TypeVariant::Volatile(volatile) => self.size_of(*volatile.tid()),
+            TypeVariant::Restrict(restrict) => self.size_of(*restrict.tid()),
+            TypeVariant::TypeTag(type_tag) => self.size_of(*type_tag.tid()),
 
             _ => Err(BTFError::new(
                 BTFErrorKind::NotSized,
@@ -329,18 +329,18 @@ impl TypeInformation {
 
     /// Returns the offset of the given type path
     pub fn offset_of_in_named_type(&self, type_name: &str, path: &str) -> BTFResult<usize> {
-        let type_id = self.id_of(type_name).ok_or(BTFError::new(
+        let tid = self.id_of(type_name).ok_or(BTFError::new(
             BTFErrorKind::InvalidTypeID,
             "The specified type id was not found",
         ))?;
 
-        self.offset_of(type_id, path)
+        self.offset_of(tid, path)
     }
 
     /// Returns the offset of the given type path
-    pub fn offset_of(&self, type_id: u32, path: &str) -> BTFResult<usize> {
+    pub fn offset_of(&self, tid: u32, path: &str) -> BTFResult<usize> {
         let path_component_list = Self::split_path_components(path)?;
-        self.offset_of_helper(0, type_id, path_component_list)
+        self.offset_of_helper(0, tid, path_component_list)
     }
 
     /// Splits the given type path into its components
@@ -466,14 +466,14 @@ impl TypeInformation {
     fn offset_of_helper(
         &self,
         mut offset: usize,
-        mut type_id: u32,
+        mut tid: u32,
         path: TypePath,
     ) -> BTFResult<usize> {
         if path.is_empty() {
             return Ok(offset);
         }
 
-        let type_var = self.from_id(type_id).ok_or(BTFError::new(
+        let type_var = self.from_id(tid).ok_or(BTFError::new(
             BTFErrorKind::InvalidTypeID,
             "Invalid type id",
         ))?;
@@ -487,23 +487,23 @@ impl TypeInformation {
             }
 
             TypeVariant::Fwd(fwd) => {
-                return self.offset_of_helper(offset, *fwd.type_id(), path);
+                return self.offset_of_helper(offset, *fwd.tid(), path);
             }
 
             TypeVariant::Typedef(typedef) => {
-                return self.offset_of_helper(offset, *typedef.type_id(), path);
+                return self.offset_of_helper(offset, *typedef.tid(), path);
             }
 
             TypeVariant::Const(cnst) => {
-                return self.offset_of_helper(offset, *cnst.type_id(), path);
+                return self.offset_of_helper(offset, *cnst.tid(), path);
             }
 
             TypeVariant::Volatile(volatile) => {
-                return self.offset_of_helper(offset, *volatile.type_id(), path);
+                return self.offset_of_helper(offset, *volatile.tid(), path);
             }
 
             TypeVariant::Restrict(restrict) => {
-                return self.offset_of_helper(offset, *restrict.type_id(), path);
+                return self.offset_of_helper(offset, *restrict.tid(), path);
             }
 
             _ => {}
@@ -527,19 +527,19 @@ impl TypeInformation {
                             ));
                         }
 
-                        let element_type_id = *array.element_type_id();
-                        let element_type_size = self.size_of(element_type_id)?;
+                        let element_tid = *array.element_tid();
+                        let element_type_size = self.size_of(element_tid)?;
                         offset += index * element_type_size;
 
-                        type_id = element_type_id;
+                        tid = element_tid;
                     }
 
                     TypeVariant::Ptr(ptr) => {
-                        let pointee_type_id = *ptr.type_id();
-                        let element_type_size = self.size_of(pointee_type_id)?;
+                        let pointee_tid = *ptr.tid();
+                        let element_type_size = self.size_of(pointee_tid)?;
 
                         offset += index * element_type_size;
-                        type_id = pointee_type_id;
+                        tid = pointee_tid;
                     }
 
                     _ => {
@@ -554,13 +554,11 @@ impl TypeInformation {
             TypePathComponent::Name(name) => {
                 match &type_var {
                     TypeVariant::Struct(str) => {
-                        offset_of_struct_and_union_helper!(self, offset, type_id, str, name, path);
+                        offset_of_struct_and_union_helper!(self, offset, tid, str, name, path);
                     }
 
                     TypeVariant::Union(union) => {
-                        offset_of_struct_and_union_helper!(
-                            self, offset, type_id, union, name, path
-                        );
+                        offset_of_struct_and_union_helper!(self, offset, tid, union, name, path);
                     }
 
                     _ => {
@@ -573,7 +571,7 @@ impl TypeInformation {
             }
         };
 
-        self.offset_of_helper(offset, type_id, path[1..].to_vec())
+        self.offset_of_helper(offset, tid, path[1..].to_vec())
     }
 }
 
@@ -637,7 +635,7 @@ mod tests {
             id_to_name_map: BTreeMap::<u32, String>::new(),
         };
 
-        // type_id:1 BTF_KIND_INT
+        // tid:1 BTF_KIND_INT
         type_info.id_to_type_map.insert(
             1,
             TypeVariant::Int(Int::create(
@@ -660,13 +658,13 @@ mod tests {
             .id_to_name_map
             .insert(1, String::from("unsigned int"));
 
-        // type_id:2 BTF_KIND_PTR
+        // tid:2 BTF_KIND_PTR
         type_info.id_to_type_map.insert(
             2,
             TypeVariant::Ptr(Ptr::create(Header::create(Kind::Ptr, 0, 0, false, 0), 0)),
         );
 
-        // type_id:3 BTF_KIND_ARRAY
+        // tid:3 BTF_KIND_ARRAY
         type_info.id_to_type_map.insert(
             3,
             TypeVariant::Array(Array::create(
@@ -681,7 +679,7 @@ mod tests {
         // BTF_KIND_STRUCT
         //
 
-        // type_id:4 Anonymous struct type
+        // tid:4 Anonymous struct type
         type_info.id_to_type_map.insert(
             4,
             TypeVariant::Struct(Struct::create(
@@ -695,7 +693,7 @@ mod tests {
             )),
         );
 
-        // type_id:5 Anonymous union type
+        // tid:5 Anonymous union type
         type_info.id_to_type_map.insert(
             5,
             TypeVariant::Union(Union::create(
@@ -709,7 +707,7 @@ mod tests {
             )),
         );
 
-        // type_id:6 Named struct type
+        // tid:6 Named struct type
         type_info.id_to_type_map.insert(
             6,
             TypeVariant::Struct(Struct::create(
@@ -728,7 +726,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from("Struct"), 6);
         type_info.id_to_name_map.insert(6, String::from("Struct"));
 
-        // type_id:7 list_head struct, used internally to determine the size of a pointer
+        // tid:7 list_head struct, used internally to determine the size of a pointer
         type_info.id_to_type_map.insert(
             7,
             TypeVariant::Struct(Struct::create(
@@ -750,7 +748,7 @@ mod tests {
             .id_to_name_map
             .insert(7, String::from("list_head"));
 
-        // type_id:8 BTF_KIND_ENUM
+        // tid:8 BTF_KIND_ENUM
         type_info.id_to_type_map.insert(
             8,
             TypeVariant::Enum(Enum::create(
@@ -767,7 +765,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from("Enum32"), 8);
         type_info.id_to_name_map.insert(8, String::from("Enum32"));
 
-        // type_id:9 BTF_KIND_ENUM64
+        // tid:9 BTF_KIND_ENUM64
         type_info.id_to_type_map.insert(
             9,
             TypeVariant::Enum64(Enum64::create(
@@ -784,7 +782,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from("Enum64"), 9);
         type_info.id_to_name_map.insert(9, String::from("Enum64"));
 
-        // type_id:10 BTF_KIND_FWD
+        // tid:10 BTF_KIND_FWD
         type_info.id_to_type_map.insert(
             10,
             TypeVariant::Fwd(Fwd::create(
@@ -801,7 +799,7 @@ mod tests {
             .id_to_name_map
             .insert(10, String::from("StructForwardDecl"));
 
-        // type_id:11 BTF_KIND_TYPEDEF
+        // tid:11 BTF_KIND_TYPEDEF
         type_info.id_to_type_map.insert(
             11,
             TypeVariant::Typedef(Typedef::create(
@@ -819,7 +817,7 @@ mod tests {
             .id_to_name_map
             .insert(11, String::from("StructAlias"));
 
-        // type_id:12 BTF_KIND_VOLATILE
+        // tid:12 BTF_KIND_VOLATILE
         type_info.id_to_type_map.insert(
             12,
             TypeVariant::Volatile(Volatile::create(
@@ -828,7 +826,7 @@ mod tests {
             )),
         );
 
-        // type_id:13 BTF_KIND_CONST
+        // tid:13 BTF_KIND_CONST
         type_info.id_to_type_map.insert(
             13,
             TypeVariant::Const(Const::create(
@@ -837,7 +835,7 @@ mod tests {
             )),
         );
 
-        // type_id:14 BTF_KIND_RESTRICT
+        // tid:14 BTF_KIND_RESTRICT
         type_info.id_to_type_map.insert(
             14,
             TypeVariant::Restrict(Restrict::create(
@@ -846,7 +844,7 @@ mod tests {
             )),
         );
 
-        // type_id:15 BTF_KIND_FUNC
+        // tid:15 BTF_KIND_FUNC
         type_info.id_to_type_map.insert(
             15,
             TypeVariant::Func(Func::create(
@@ -859,7 +857,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from("func"), 15);
         type_info.id_to_name_map.insert(15, String::from("func"));
 
-        // type_id:16 BTF_KIND_FUNC_PROTO
+        // tid:16 BTF_KIND_FUNC_PROTO
         type_info.id_to_type_map.insert(
             16,
             TypeVariant::FuncProto(FuncProto::create(
@@ -869,7 +867,7 @@ mod tests {
             )),
         );
 
-        // type_id:17 BTF_KIND_VAR
+        // tid:17 BTF_KIND_VAR
         type_info.id_to_type_map.insert(
             17,
             TypeVariant::Var(Var::create(
@@ -884,7 +882,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from("var"), 17);
         type_info.id_to_name_map.insert(17, String::from("var"));
 
-        // type_id:18 BTF_KIND_DATASEC
+        // tid:18 BTF_KIND_DATASEC
         type_info.id_to_type_map.insert(
             18,
             TypeVariant::DataSec(DataSec::create(
@@ -914,7 +912,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from(".data"), 18);
         type_info.id_to_name_map.insert(18, String::from(".data"));
 
-        // type_id:19 BTF_KIND_FLOAT
+        // tid:19 BTF_KIND_FLOAT
         type_info.id_to_type_map.insert(
             19,
             TypeVariant::Float(Float::create(
@@ -927,7 +925,7 @@ mod tests {
         type_info.name_to_id_map.insert(String::from("double"), 19);
         type_info.id_to_name_map.insert(19, String::from("double"));
 
-        // type_id:20 BTF_KIND_DECL_TAG
+        // tid:20 BTF_KIND_DECL_TAG
         type_info.id_to_type_map.insert(
             20,
             TypeVariant::DeclTag(DeclTag::create(
@@ -946,7 +944,7 @@ mod tests {
             .id_to_name_map
             .insert(20, String::from("decl_tag"));
 
-        // type_id:21 BTF_KIND_TYPE_TAG
+        // tid:21 BTF_KIND_TYPE_TAG
         type_info.id_to_type_map.insert(
             21,
             TypeVariant::TypeTag(TypeTag::create(

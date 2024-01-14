@@ -19,7 +19,7 @@ struct Data {
     name: Option<String>,
 
     /// The type id of the var
-    type_id: u32,
+    tid: u32,
 
     /// The raw linkage field from the type section
     linkage: u32,
@@ -58,7 +58,7 @@ impl Data {
 
         Ok(Self {
             name,
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
             linkage,
             linkage_type,
         })
@@ -67,7 +67,7 @@ impl Data {
 
 define_type!(Var, Data,
     name: Option<String>,
-    type_id: u32,
+    tid: u32,
     linkage: u32,
     linkage_type: LinkageType
 );
@@ -112,7 +112,7 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let var_type = Var::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(var_type.name().as_deref(), Some("static_var"));
-        assert_eq!(*var_type.type_id(), 5);
+        assert_eq!(*var_type.tid(), 5);
         assert_eq!(*var_type.linkage_type(), LinkageType::Global);
         assert_eq!(*var_type.linkage(), 0x01);
     }

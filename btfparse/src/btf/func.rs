@@ -12,7 +12,7 @@ struct Data {
     name: Option<String>,
 
     /// Prototype type id
-    prototype_type_id: u32,
+    prototype_tid: u32,
 }
 
 impl Data {
@@ -39,12 +39,12 @@ impl Data {
 
         Ok(Self {
             name,
-            prototype_type_id: type_header.size_or_type(),
+            prototype_tid: type_header.size_or_type(),
         })
     }
 }
 
-define_type!(Func, Data, name: Option<String>, prototype_type_id: u32);
+define_type!(Func, Data, name: Option<String>, prototype_tid: u32);
 
 #[cfg(test)]
 mod tests {
@@ -84,6 +84,6 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let func = Func::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(func.name().as_deref(), Some("exit"));
-        assert_eq!(*func.prototype_type_id(), 3);
+        assert_eq!(*func.prototype_tid(), 3);
     }
 }

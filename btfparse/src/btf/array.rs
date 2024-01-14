@@ -12,10 +12,10 @@ const ENUM_VALUE_SIZE: usize = 12;
 #[derive(Debug, Clone, Copy)]
 struct Data {
     /// The element type id
-    element_type_id: u32,
+    element_tid: u32,
 
     /// The index type id
-    index_type_id: u32,
+    index_tid: u32,
 
     /// The number of elements in the array
     element_count: u32,
@@ -33,21 +33,21 @@ impl Data {
         _file_header: &FileHeader,
         _type_header: &Header,
     ) -> BTFResult<Self> {
-        let element_type_id = reader.u32()?;
-        let index_type_id = reader.u32()?;
+        let element_tid = reader.u32()?;
+        let index_tid = reader.u32()?;
         let element_count = reader.u32()?;
 
         Ok(Data {
-            element_type_id,
-            index_type_id,
+            element_tid,
+            index_tid,
             element_count,
         })
     }
 }
 
 define_type!(Array, Data,
-    element_type_id: u32,
-    index_type_id: u32,
+    element_tid: u32,
+    index_tid: u32,
     element_count: u32
 );
 
@@ -91,8 +91,8 @@ mod tests {
         let file_header = FileHeader::new(&mut reader).unwrap();
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let array = Array::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(*array.element_type_id(), 5);
-        assert_eq!(*array.index_type_id(), 6);
+        assert_eq!(*array.element_tid(), 5);
+        assert_eq!(*array.index_tid(), 6);
         assert_eq!(*array.element_count(), 7);
     }
 }

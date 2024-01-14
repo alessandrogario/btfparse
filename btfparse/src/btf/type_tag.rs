@@ -12,7 +12,7 @@ struct Data {
     name: Option<String>,
 
     /// The type id
-    type_id: u32,
+    tid: u32,
 }
 
 impl Data {
@@ -39,12 +39,12 @@ impl Data {
 
         Ok(Self {
             name,
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
         })
     }
 }
 
-define_type!(TypeTag, Data, name: Option<String>, type_id: u32);
+define_type!(TypeTag, Data, name: Option<String>, tid: u32);
 
 #[cfg(test)]
 mod tests {
@@ -84,6 +84,6 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let type_tag = TypeTag::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(type_tag.name().as_deref(), Some("int"));
-        assert_eq!(*type_tag.type_id(), 3);
+        assert_eq!(*type_tag.tid(), 3);
     }
 }

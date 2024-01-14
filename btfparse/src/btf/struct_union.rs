@@ -18,7 +18,7 @@ pub struct Member {
     name: Option<String>,
 
     /// The member type id
-    type_id: u32,
+    tid: u32,
 
     /// The member offset
     offset: u32,
@@ -36,8 +36,8 @@ impl Member {
     }
 
     /// Returns the type id of the member
-    pub fn type_id(&self) -> u32 {
-        self.type_id
+    pub fn tid(&self) -> u32 {
+        self.tid
     }
 
     /// Returns the offset of the member
@@ -47,11 +47,11 @@ impl Member {
 
     /// Creates a new `Member` instance for testing purposes
     #[cfg(test)]
-    pub fn create(name_offset: u32, name: Option<String>, type_id: u32, offset: u32) -> Self {
+    pub fn create(name_offset: u32, name: Option<String>, tid: u32, offset: u32) -> Self {
         Self {
             name_offset,
             name,
-            type_id,
+            tid,
             offset,
         }
     }
@@ -89,7 +89,7 @@ impl Data {
 
         for _ in 0..type_header.vlen() {
             let name_offset = reader.u32()?;
-            let type_id = reader.u32()?;
+            let tid = reader.u32()?;
             let offset = reader.u32()?;
 
             let name = if name_offset != 0 {
@@ -101,7 +101,7 @@ impl Data {
             member_list.push(Member {
                 name_offset,
                 name,
-                type_id,
+                tid,
                 offset,
             });
         }
@@ -180,14 +180,14 @@ mod tests {
         assert!(!struct_type.header().kind_flag());
         assert_eq!(struct_type.member_list().len(), 2);
 
-        assert_eq!(struct_type.member_list()[0].type_id(), 2);
+        assert_eq!(struct_type.member_list()[0].tid(), 2);
         assert_eq!(struct_type.member_list()[0].offset(), 8);
         assert_eq!(
             struct_type.member_list()[0].name().as_deref(),
             Some("value1")
         );
 
-        assert_eq!(struct_type.member_list()[1].type_id(), 3);
+        assert_eq!(struct_type.member_list()[1].tid(), 3);
         assert_eq!(struct_type.member_list()[1].offset(), 8);
         assert_eq!(
             struct_type.member_list()[1].name().as_deref(),
@@ -241,14 +241,14 @@ mod tests {
         assert!(!union_type.header().kind_flag());
         assert_eq!(union_type.member_list().len(), 2);
 
-        assert_eq!(union_type.member_list()[0].type_id(), 2);
+        assert_eq!(union_type.member_list()[0].tid(), 2);
         assert_eq!(union_type.member_list()[0].offset(), 8);
         assert_eq!(
             union_type.member_list()[0].name().as_deref(),
             Some("value1")
         );
 
-        assert_eq!(union_type.member_list()[1].type_id(), 3);
+        assert_eq!(union_type.member_list()[1].tid(), 3);
         assert_eq!(union_type.member_list()[1].offset(), 8);
         assert_eq!(
             union_type.member_list()[1].name().as_deref(),

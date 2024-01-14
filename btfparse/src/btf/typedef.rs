@@ -12,7 +12,7 @@ struct Data {
     name: Option<String>,
 
     /// The typedef'd type
-    type_id: u32,
+    tid: u32,
 }
 
 impl Data {
@@ -39,12 +39,12 @@ impl Data {
 
         Ok(Self {
             name,
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
         })
     }
 }
 
-define_type!(Typedef, Data, type_id: u32, name: Option<String>);
+define_type!(Typedef, Data, tid: u32, name: Option<String>);
 
 #[cfg(test)]
 mod tests {
@@ -84,6 +84,6 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let typedef_type = Typedef::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(typedef_type.name().as_deref(), Some("void*"));
-        assert_eq!(*typedef_type.type_id(), 0);
+        assert_eq!(*typedef_type.tid(), 0);
     }
 }

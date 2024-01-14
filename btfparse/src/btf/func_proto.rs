@@ -18,7 +18,7 @@ pub struct Parameter {
     name: Option<String>,
 
     /// The parameter type id
-    type_id: u32,
+    tid: u32,
 }
 
 impl Parameter {
@@ -33,8 +33,8 @@ impl Parameter {
     }
 
     /// Returns the type id of the parameter
-    pub fn type_id(&self) -> u32 {
-        self.type_id
+    pub fn tid(&self) -> u32 {
+        self.tid
     }
 }
 
@@ -48,7 +48,7 @@ struct Data {
     parameter_list: ParameterList,
 
     /// Return type id
-    return_type_id: u32,
+    return_tid: u32,
 }
 
 impl Data {
@@ -67,7 +67,7 @@ impl Data {
 
         for _ in 0..type_header.vlen() {
             let name_offset = reader.u32()?;
-            let type_id = reader.u32()?;
+            let tid = reader.u32()?;
 
             let name = if name_offset != 0 {
                 Some(parse_string(reader, file_header, name_offset)?)
@@ -78,18 +78,18 @@ impl Data {
             parameter_list.push(Parameter {
                 name_offset,
                 name,
-                type_id,
+                tid,
             });
         }
 
         Ok(Self {
             parameter_list,
-            return_type_id: type_header.size_or_type(),
+            return_tid: type_header.size_or_type(),
         })
     }
 }
 
-define_type!(FuncProto, Data, return_type_id: u32, parameter_list: ParameterList);
+define_type!(FuncProto, Data, return_tid: u32, parameter_list: ParameterList);
 
 #[cfg(test)]
 mod tests {
@@ -137,16 +137,16 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let func_proto_type = FuncProto::new(&mut reader, &file_header, type_header).unwrap();
 
-        assert_eq!(*func_proto_type.return_type_id(), 5);
+        assert_eq!(*func_proto_type.return_tid(), 5);
         assert_eq!(func_proto_type.parameter_list().len(), 2);
 
-        assert_eq!(func_proto_type.parameter_list()[0].type_id(), 2);
+        assert_eq!(func_proto_type.parameter_list()[0].tid(), 2);
         assert_eq!(
             func_proto_type.parameter_list()[0].name().as_deref(),
             Some("param1")
         );
 
-        assert_eq!(func_proto_type.parameter_list()[1].type_id(), 3);
+        assert_eq!(func_proto_type.parameter_list()[1].tid(), 3);
         assert_eq!(
             func_proto_type.parameter_list()[1].name().as_deref(),
             Some("param2")

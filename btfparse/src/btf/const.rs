@@ -9,7 +9,7 @@ use crate::utils::Reader;
 #[derive(Debug, Clone)]
 struct Data {
     /// The const type
-    type_id: u32,
+    tid: u32,
 }
 
 impl Data {
@@ -25,12 +25,12 @@ impl Data {
         type_header: &Header,
     ) -> BTFResult<Self> {
         Ok(Self {
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
         })
     }
 }
 
-define_type!(Const, Data, type_id: u32);
+define_type!(Const, Data, tid: u32);
 
 #[cfg(test)]
 mod tests {
@@ -68,6 +68,6 @@ mod tests {
         let file_header = FileHeader::new(&mut reader).unwrap();
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let const_type = Const::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(*const_type.type_id(), 3);
+        assert_eq!(*const_type.tid(), 3);
     }
 }

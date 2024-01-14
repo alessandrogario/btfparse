@@ -12,7 +12,7 @@ struct Data {
     name: Option<String>,
 
     /// The forwarded type id
-    type_id: u32,
+    tid: u32,
 }
 
 impl Data {
@@ -39,14 +39,14 @@ impl Data {
 
         Ok(Self {
             name,
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
         })
     }
 }
 
 define_type!(Fwd, Data,
     name: Option<String>,
-    type_id: u32);
+    tid: u32);
 
 #[cfg(test)]
 mod tests {

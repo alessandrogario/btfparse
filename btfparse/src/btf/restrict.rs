@@ -9,7 +9,7 @@ use crate::utils::Reader;
 #[derive(Debug, Clone)]
 struct Data {
     /// The restrict type
-    type_id: u32,
+    tid: u32,
 }
 
 impl Data {
@@ -25,12 +25,12 @@ impl Data {
         type_header: &Header,
     ) -> BTFResult<Self> {
         Ok(Self {
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
         })
     }
 }
 
-define_type!(Restrict, Data, type_id: u32);
+define_type!(Restrict, Data, tid: u32);
 
 #[cfg(test)]
 mod tests {
@@ -68,6 +68,6 @@ mod tests {
         let file_header = FileHeader::new(&mut reader).unwrap();
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let restrict = Restrict::new(&mut reader, &file_header, type_header).unwrap();
-        assert_eq!(*restrict.type_id(), 3);
+        assert_eq!(*restrict.tid(), 3);
     }
 }

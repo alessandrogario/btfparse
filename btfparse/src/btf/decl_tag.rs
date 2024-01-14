@@ -12,7 +12,7 @@ struct Data {
     name: Option<String>,
 
     /// The type id
-    type_id: u32,
+    tid: u32,
 
     /// Component index
     component_index: u32,
@@ -44,7 +44,7 @@ impl Data {
 
         Ok(Self {
             name,
-            type_id: type_header.size_or_type(),
+            tid: type_header.size_or_type(),
             component_index,
         })
     }
@@ -52,7 +52,7 @@ impl Data {
 
 define_type!(DeclTag, Data,
     name: Option<String>,
-    type_id: u32,
+    tid: u32,
     component_index: u32
 );
 
