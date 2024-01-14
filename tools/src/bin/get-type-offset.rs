@@ -38,7 +38,7 @@ fn main() {
     let vmlinux_btf_file = ReadableFile::new(btf_file_path);
     let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
     let offset = type_information
-        .offset_of_in_named_type(btf_type_name, type_path)
+        .offset_of(type_information.id_of(btf_type_name).unwrap(), type_path)
         .unwrap();
 
     println!("{} => {}: {}", btf_type_name, type_path, offset);

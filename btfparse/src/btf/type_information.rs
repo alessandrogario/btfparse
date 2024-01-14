@@ -328,16 +328,6 @@ impl TypeInformation {
     }
 
     /// Returns the offset of the given type path
-    pub fn offset_of_in_named_type(&self, type_name: &str, path: &str) -> BTFResult<usize> {
-        let tid = self.id_of(type_name).ok_or(BTFError::new(
-            BTFErrorKind::InvalidTypeID,
-            "The specified type id was not found",
-        ))?;
-
-        self.offset_of(tid, path)
-    }
-
-    /// Returns the offset of the given type path
     pub fn offset_of(&self, tid: u32, path: &str) -> BTFResult<usize> {
         let path_component_list = Self::split_path_components(path)?;
         self.offset_of_helper(0, tid, path_component_list)
@@ -481,7 +471,7 @@ impl TypeInformation {
         match type_var {
             TypeVariant::Void => {
                 return Err(BTFError::new(
-                    BTFErrorKind::UnsupportedType,
+                    BTFErrorKind::InvalidTypePath,
                     "The void type can't be dereferenced with a path",
                 ));
             }
@@ -534,19 +524,18 @@ impl TypeInformation {
                         tid = element_tid;
                     }
 
-                    TypeVariant::Ptr(ptr) => {
-                        let pointee_tid = *ptr.tid();
-                        let element_type_size = self.size_of(pointee_tid)?;
+                    type_var => {
+                        let error_message = match type_var {
+                            TypeVariant::Ptr(_) => {
+                                format!("Type {:?} is a ptr, and dereferencing it would require a read operation", type_var)
+                            }
 
-                        offset += index * element_type_size;
-                        tid = pointee_tid;
-                    }
+                            _ => {
+                                format!("Type {:?} is not indexable", type_var)
+                            }
+                        };
 
-                    _ => {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Type {:?} is not indexable", type_var),
-                        ));
+                        return Err(BTFError::new(BTFErrorKind::InvalidTypePath, &error_message));
                     }
                 };
             }
@@ -658,10 +647,11 @@ mod tests {
             .id_to_name_map
             .insert(1, String::from("unsigned int"));
 
-        // tid:2 BTF_KIND_PTR
+        // tid:2 BTF_KIND_PTR. Make this reference the named struct type we define
+        // later on
         type_info.id_to_type_map.insert(
             2,
-            TypeVariant::Ptr(Ptr::create(Header::create(Kind::Ptr, 0, 0, false, 0), 0)),
+            TypeVariant::Ptr(Ptr::create(Header::create(Kind::Ptr, 0, 0, false, 6), 6)),
         );
 
         // tid:3 BTF_KIND_ARRAY
@@ -821,8 +811,8 @@ mod tests {
         type_info.id_to_type_map.insert(
             12,
             TypeVariant::Volatile(Volatile::create(
-                Header::create(Kind::Volatile, 0, 0, false, 1),
-                1,
+                Header::create(Kind::Volatile, 0, 0, false, 6),
+                6,
             )),
         );
 
@@ -830,8 +820,8 @@ mod tests {
         type_info.id_to_type_map.insert(
             13,
             TypeVariant::Const(Const::create(
-                Header::create(Kind::Const, 0, 0, false, 1),
-                1,
+                Header::create(Kind::Const, 0, 0, false, 6),
+                6,
             )),
         );
 
@@ -839,8 +829,8 @@ mod tests {
         type_info.id_to_type_map.insert(
             14,
             TypeVariant::Restrict(Restrict::create(
-                Header::create(Kind::Restrict, 0, 0, false, 1),
-                1,
+                Header::create(Kind::Restrict, 0, 0, false, 6),
+                6,
             )),
         );
 
@@ -1004,17 +994,17 @@ mod tests {
         assert_eq!(type_info.name_of(10).unwrap(), "StructForwardDecl");
         assert!(type_info.size_of(10).unwrap_err().kind() == BTFErrorKind::NotSized);
 
-        // The typedef points to the named struct, which is 28 bytes
+        // The typedef references the named struct, which is 28 bytes
         assert_eq!(type_info.size_of(11).unwrap(), 28);
 
-        // The volatile points to the int, which is 4 bytes
-        assert_eq!(type_info.size_of(12).unwrap(), 4);
+        // The volatile references the named struct `Struct`, which is 28 bytes
+        assert_eq!(type_info.size_of(12).unwrap(), 28);
 
-        // The const points to the int, which is 4 bytes
-        assert_eq!(type_info.size_of(13).unwrap(), 4);
+        // The const references the named struct `Struct`, which is 28 bytes
+        assert_eq!(type_info.size_of(13).unwrap(), 28);
 
-        // The restrict points to the int, which is 4 bytes
-        assert_eq!(type_info.size_of(14).unwrap(), 4);
+        // The restrict references the named struct `Struct`, which is 28 bytes
+        assert_eq!(type_info.size_of(14).unwrap(), 28);
 
         // The BTF_KIND_FUNC has no size because it is not a type
         assert_eq!(type_info.name_of(15).unwrap(), "func");
@@ -1035,47 +1025,87 @@ mod tests {
         // The BTF_KIND_DECL_TAG has no size
         assert!(type_info.size_of(20).unwrap_err().kind() == BTFErrorKind::NotSized);
 
-        // The BTF_KIND_DECL_TAG has size of the type it is applied to (named struct)
+        // The BTF_KIND_TYPE_TAG has size of the type it is applied to (named struct)
         assert_eq!(type_info.size_of(21).unwrap(), 28);
     }
 
     #[test]
     fn test_offset_of() {
         let type_info = get_test_type_info();
-        let int_value_offset = type_info
-            .offset_of(type_info.id_of("Struct").unwrap(), "int_value")
-            .unwrap();
 
-        assert_eq!(int_value_offset, 16 * 8);
+        // void, int, ptr, enum, enum64, fwd, float
+        let no_deref_tid_list1 = [0, 1, 2, 8, 9, 10, 19];
 
-        let ptr_value_offset = type_info
-            .offset_of(type_info.id_of("Struct").unwrap(), "ptr_value")
-            .unwrap();
+        // func, func_proto, var, datasec, decl_tag, type tag
+        let no_deref_tid_list2 = [15, 16, 17, 18, 20, 21];
 
-        assert_eq!(ptr_value_offset, 20 * 8);
+        for tid in no_deref_tid_list1.iter().chain(no_deref_tid_list2.iter()) {
+            assert_eq!(
+                type_info.offset_of(*tid, "test").unwrap_err().kind(),
+                BTFErrorKind::InvalidTypePath
+            );
 
-        let anon_struct_value1_offset = type_info
-            .offset_of(type_info.id_of("Struct").unwrap(), "anon_struct_value1")
-            .unwrap();
+            assert_eq!(
+                type_info.offset_of(*tid, "[0]").unwrap_err().kind(),
+                BTFErrorKind::InvalidTypePath
+            );
+        }
 
-        assert_eq!(anon_struct_value1_offset, 0);
+        // Arrays can only be dereferenced with indexes
+        assert_eq!(
+            type_info.offset_of(3, "test").unwrap_err().kind(),
+            BTFErrorKind::InvalidTypePath
+        );
 
-        let anon_struct_value2_offset = type_info
-            .offset_of(type_info.id_of("Struct").unwrap(), "anon_struct_value2")
-            .unwrap();
+        assert_eq!(type_info.offset_of(3, "[0]").unwrap(), 0);
+        assert_eq!(type_info.offset_of(3, "[1]").unwrap(), 4);
+        assert_eq!(type_info.offset_of(3, "[2]").unwrap(), 8);
+        assert_eq!(type_info.offset_of(3, "[3]").unwrap(), 12);
+        assert_eq!(type_info.offset_of(3, "[4]").unwrap(), 16);
+        assert_eq!(type_info.offset_of(3, "[5]").unwrap(), 20);
+        assert_eq!(type_info.offset_of(3, "[6]").unwrap(), 24);
+        assert_eq!(type_info.offset_of(3, "[7]").unwrap(), 28);
+        assert_eq!(type_info.offset_of(3, "[8]").unwrap(), 32);
+        assert_eq!(type_info.offset_of(3, "[9]").unwrap(), 36);
 
-        assert_eq!(anon_struct_value2_offset, 4 * 8);
+        assert_eq!(
+            type_info.offset_of(3, "[10]").unwrap_err().kind(),
+            BTFErrorKind::InvalidTypePath
+        );
 
-        let anon_union_value1_offset = type_info
-            .offset_of(type_info.id_of("Struct").unwrap(), "anon_union_value1")
-            .unwrap();
+        // Named struct and the typedef/const/volatile/restrict that reference it
+        for struct_tid in [6, 11, 12, 13, 14] {
+            let int_value_offset = type_info.offset_of(struct_tid, "int_value").unwrap();
 
-        assert_eq!(anon_union_value1_offset, 8 * 8);
+            assert_eq!(int_value_offset, 16 * 8);
 
-        let anon_union_value2_offset = type_info
-            .offset_of(type_info.id_of("Struct").unwrap(), "anon_union_value2")
-            .unwrap();
+            let ptr_value_offset = type_info.offset_of(struct_tid, "ptr_value").unwrap();
 
-        assert_eq!(anon_union_value2_offset, 8 * 8);
+            assert_eq!(ptr_value_offset, 20 * 8);
+
+            let anon_struct_value1_offset = type_info
+                .offset_of(struct_tid, "anon_struct_value1")
+                .unwrap();
+
+            assert_eq!(anon_struct_value1_offset, 0);
+
+            let anon_struct_value2_offset = type_info
+                .offset_of(struct_tid, "anon_struct_value2")
+                .unwrap();
+
+            assert_eq!(anon_struct_value2_offset, 4 * 8);
+
+            let anon_union_value1_offset = type_info
+                .offset_of(struct_tid, "anon_union_value1")
+                .unwrap();
+
+            assert_eq!(anon_union_value1_offset, 8 * 8);
+
+            let anon_union_value2_offset = type_info
+                .offset_of(struct_tid, "anon_union_value2")
+                .unwrap();
+
+            assert_eq!(anon_union_value2_offset, 8 * 8);
+        }
     }
 }
