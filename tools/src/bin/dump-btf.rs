@@ -34,5 +34,5 @@ fn main() {
 
     let vmlinux_btf_file = ReadableFile::new(btf_file_path);
     let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
-    println!("{:?}", type_information.type_map());
+    println!("{:?}", type_information.get());
 }

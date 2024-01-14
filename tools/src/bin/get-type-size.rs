@@ -37,8 +37,8 @@ fn main() {
     let vmlinux_btf_file = ReadableFile::new(btf_file_path);
     let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
 
-    let type_id = type_information.type_id(btf_type_name).unwrap();
-    let type_size = type_information.type_size(type_id).unwrap();
+    let type_id = type_information.id_of(btf_type_name).unwrap();
+    let type_size = type_information.size_of(type_id).unwrap();
     println!(
         "Type {} has ID {} and requires {} bytes in total",
         btf_type_name, type_id, type_size

@@ -1,50 +1,5 @@
 #[macro_export]
-macro_rules! define_common_type_methods {
-    ($name:ident) => {
-        impl Type for $name {
-            /// Returns the type header
-            fn header(&self) -> &Header {
-                &self.type_header
-            }
-        }
-    };
-}
-
-#[macro_export]
 macro_rules! define_type {
-    ($name:ident) => {
-        /// Represents a `$name` type
-        #[derive(Debug, Clone)]
-        pub struct $name {
-            /// Type header
-            type_header: Header,
-        }
-
-        define_common_type_methods!($name);
-
-        impl $name {
-            /// Creates a new `$name` object
-            pub fn new(
-                reader: &mut Reader,
-                file_header: &FileHeader,
-                type_header: Header,
-            ) -> BTFResult<Self> {
-                if !matches!(type_header.kind(), Kind::$name) {
-                    return Err(BTFError::new(
-                        BTFErrorKind::InvalidBTFKind,
-                        &format!(
-                            "Invalid type kind: {:?} (expected {:?})",
-                            type_header.kind(),
-                            Kind::$name
-                        ),
-                    ));
-                }
-
-                Ok(Self { type_header })
-            }
-        }
-    };
-
     ($name:ident, $type:ty, $($data_name:ident: $data_type:ty),+) => {
         /// Represents a `$name` type
         #[derive(Debug, Clone)]
@@ -56,9 +11,32 @@ macro_rules! define_type {
             data: $type,
         }
 
-        define_common_type_methods!($name);
+        impl Type for $name {
+            /// Returns the type header
+            fn header(&self) -> &Header {
+                &self.type_header
+            }
+        }
 
         impl $name {
+            /// Creates a new `$name` object from the given data. Used for testing.
+            #[allow(clippy::too_many_arguments)]
+            #[cfg(test)]
+            pub fn create(
+                type_header: Header,
+                $($data_name: $data_type, )*
+            ) -> Self {
+                Self {
+                    type_header,
+                    data: Data {
+
+                        $(
+                            $data_name: $data_name.clone(),
+                        )*
+                    },
+                }
+            }
+
             /// Creates a new `$name` object
             pub fn new(
                 reader: &mut Reader,

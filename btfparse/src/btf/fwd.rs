@@ -2,12 +2,12 @@ use crate::btf::{
     parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
     Result as BTFResult, Type,
 };
+use crate::define_type;
 use crate::utils::Reader;
-use crate::{define_common_type_methods, define_type};
 
 /// Fwd data
 #[derive(Debug, Clone)]
-pub struct Data {
+struct Data {
     /// The fwd type name
     name: Option<String>,
 

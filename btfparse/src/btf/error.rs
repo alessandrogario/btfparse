@@ -38,6 +38,9 @@ pub enum ErrorKind {
 
     /// Invalid type id
     InvalidTypeID,
+
+    /// The specified BTF type id is not sized
+    NotSized,
 }
 
 /// An error type for the `reader` module

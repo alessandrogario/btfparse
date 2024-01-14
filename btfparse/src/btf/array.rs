@@ -2,15 +2,15 @@ use crate::btf::{
     Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Result as BTFResult,
     Type,
 };
+use crate::define_type;
 use crate::utils::Reader;
-use crate::{define_common_type_methods, define_type};
 
 /// The size of the extra data
 const ENUM_VALUE_SIZE: usize = 12;
 
 /// Array data
 #[derive(Debug, Clone, Copy)]
-pub struct Data {
+struct Data {
     /// The element type id
     element_type_id: u32,
 

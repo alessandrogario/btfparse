@@ -2,8 +2,8 @@ use crate::btf::{
     parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
     Result as BTFResult, Type,
 };
+use crate::define_type;
 use crate::utils::Reader;
-use crate::{define_common_type_methods, define_type};
 
 /// The size of a single variable decl defined in this data section
 const DATA_SEC_VARIABLE_SIZE: usize = 12;
@@ -26,7 +26,7 @@ pub type VariableList = Vec<Variable>;
 
 /// DataSec date
 #[derive(Debug, Clone)]
-pub struct Data {
+struct Data {
     /// The data sec name
     name: Option<String>,
 

@@ -2,8 +2,8 @@ use crate::btf::{
     parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
     Result as BTFResult, Type,
 };
+use crate::define_type;
 use crate::utils::Reader;
-use crate::{define_common_type_methods, define_type};
 
 /// The size required to hold the extra data for a single member
 const MEMBER_VALUE_SIZE: usize = 12;
@@ -44,6 +44,17 @@ impl Member {
     pub fn offset(&self) -> u32 {
         self.offset
     }
+
+    /// Creates a new `Member` instance for testing purposes
+    #[cfg(test)]
+    pub fn create(name_offset: u32, name: Option<String>, type_id: u32, offset: u32) -> Self {
+        Self {
+            name_offset,
+            name,
+            type_id,
+            offset,
+        }
+    }
 }
 
 /// A list of struct or union members
@@ -51,7 +62,7 @@ pub type MemberList = Vec<Member>;
 
 /// Struct or union data
 #[derive(Debug, Clone)]
-pub struct Data {
+struct Data {
     /// The struct or union name
     name: Option<String>,
 

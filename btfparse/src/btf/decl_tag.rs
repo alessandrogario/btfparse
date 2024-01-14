@@ -2,14 +2,17 @@ use crate::btf::{
     parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
     Result as BTFResult, Type,
 };
+use crate::define_type;
 use crate::utils::Reader;
-use crate::{define_common_type_methods, define_type};
 
 /// DeclTag data
 #[derive(Debug, Clone)]
-pub struct Data {
+struct Data {
     /// Decl tag name
     name: Option<String>,
+
+    /// The type id
+    type_id: u32,
 
     /// Component index
     component_index: u32,
@@ -41,6 +44,7 @@ impl Data {
 
         Ok(Self {
             name,
+            type_id: type_header.size_or_type(),
             component_index,
         })
     }
@@ -48,6 +52,7 @@ impl Data {
 
 define_type!(DeclTag, Data,
     name: Option<String>,
+    type_id: u32,
     component_index: u32
 );
 

@@ -2,8 +2,8 @@ use crate::btf::{
     parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
     Result as BTFResult, Type,
 };
+use crate::define_type;
 use crate::utils::Reader;
-use crate::{define_common_type_methods, define_type};
 
 /// The size required to hold the extra data for a single parameter
 const PARAMETER_VALUE_SIZE: usize = 8;
@@ -43,7 +43,7 @@ pub type ParameterList = Vec<Parameter>;
 
 /// Func proto data
 #[derive(Debug, Clone)]
-pub struct Data {
+struct Data {
     /// The full parameter list for this function prototype data
     parameter_list: ParameterList,
 

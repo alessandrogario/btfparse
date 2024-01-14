@@ -78,6 +78,24 @@ impl Header {
     pub fn size_or_type(&self) -> u32 {
         self.size_or_type
     }
+
+    /// Creates a new `Header` instance for testing purposes
+    #[cfg(test)]
+    pub fn create(
+        kind: Kind,
+        name_offset: u32,
+        vlen: usize,
+        kind_flag: bool,
+        size_or_type: u32,
+    ) -> Header {
+        Header {
+            kind,
+            name_offset,
+            vlen,
+            kind_flag,
+            size_or_type,
+        }
+    }
 }
 
 #[cfg(test)]
