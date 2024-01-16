@@ -1,5 +1,5 @@
 use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Offset,
     Result as BTFResult, Type,
 };
 use crate::define_type;
@@ -21,7 +21,7 @@ pub struct Member {
     tid: u32,
 
     /// The member offset
-    offset: u32,
+    offset: Offset,
 }
 
 impl Member {
@@ -41,13 +41,13 @@ impl Member {
     }
 
     /// Returns the offset of the member
-    pub fn offset(&self) -> u32 {
+    pub fn offset(&self) -> Offset {
         self.offset
     }
 
     /// Creates a new `Member` instance for testing purposes
     #[cfg(test)]
-    pub fn create(name_offset: u32, name: Option<String>, tid: u32, offset: u32) -> Self {
+    pub fn create(name_offset: u32, name: Option<String>, tid: u32, offset: Offset) -> Self {
         Self {
             name_offset,
             name,
@@ -90,12 +90,36 @@ impl Data {
         for _ in 0..type_header.vlen() {
             let name_offset = reader.u32()?;
             let tid = reader.u32()?;
-            let offset = reader.u32()?;
+            let raw_offset = reader.u32()?;
 
             let name = if name_offset != 0 {
                 Some(parse_string(reader, file_header, name_offset)?)
             } else {
                 None
+            };
+
+            let offset = match type_header.kind_flag() {
+                false => {
+                    if (raw_offset % 8) == 0 {
+                        Offset::ByteOffset(raw_offset / 8)
+                    } else {
+                        return Err(BTFError::new(
+                            BTFErrorKind::InvalidOffset,
+                            "Unaligned bit offset for struct/union member with kind_flag=false",
+                        ));
+                    }
+                }
+
+                true => {
+                    let bit_offset = raw_offset & 0xFFFFFF;
+                    let bit_size = (raw_offset >> 24) & 0xFF;
+
+                    if bit_size == 0 && (bit_offset % 8) == 0 {
+                        Offset::ByteOffset(bit_offset / 8)
+                    } else {
+                        Offset::BitOffsetAndSize(bit_offset, bit_size)
+                    }
+                }
             };
 
             member_list.push(Member {
@@ -129,13 +153,13 @@ define_type!(Union, Data, name: Option<String>, size: usize, member_list: Member
 
 #[cfg(test)]
 mod tests {
-    use super::{Struct, Union};
-    use crate::btf::{FileHeader, Header};
+    use super::Struct;
+    use crate::btf::{FileHeader, Header, Offset};
     use crate::utils::{ReadableBuffer, Reader};
     use crate::Type;
 
     #[test]
-    fn test_struct() {
+    fn test_standard_struct_union() {
         let readable_buffer = ReadableBuffer::new(&[
             //
             // BTF header
@@ -181,14 +205,14 @@ mod tests {
         assert_eq!(struct_type.member_list().len(), 2);
 
         assert_eq!(struct_type.member_list()[0].tid(), 2);
-        assert_eq!(struct_type.member_list()[0].offset(), 8);
+        assert_eq!(struct_type.member_list()[0].offset(), Offset::ByteOffset(1));
         assert_eq!(
             struct_type.member_list()[0].name().as_deref(),
             Some("value1")
         );
 
         assert_eq!(struct_type.member_list()[1].tid(), 3);
-        assert_eq!(struct_type.member_list()[1].offset(), 8);
+        assert_eq!(struct_type.member_list()[1].offset(), Offset::ByteOffset(1));
         assert_eq!(
             struct_type.member_list()[1].name().as_deref(),
             Some("value2")
@@ -196,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn test_union() {
+    fn test_bitfield_struct_union() {
         let readable_buffer = ReadableBuffer::new(&[
             //
             // BTF header
@@ -213,17 +237,17 @@ mod tests {
             // Type section
             //
             0x00, 0x00, 0x00, 0x00, // type header: name_offset
-            0x02, 0x00, 0x00, 0x05, // type header: info_flags
+            0x02, 0x00, 0x00, 0x84, // type header: info_flags
             0x02, 0x00, 0x00, 0x00, // type header: size_or_type
             //
             // Extra data
             //
             0x01, 0x00, 0x00, 0x00, // member 1: name offset
             0x02, 0x00, 0x00, 0x00, // member 1: type id
-            0x08, 0x00, 0x00, 0x00, // member 1: offset
+            0x08, 0x00, 0x00, 0x00, // member 1: bit offset, bit size (kind flag = 1)
             0x08, 0x00, 0x00, 0x00, // member 2: name offset
             0x03, 0x00, 0x00, 0x00, // member 2: type id
-            0x08, 0x00, 0x00, 0x00, // member 2: offset
+            0x0A, 0x00, 0x00, 0x0B, // member 2: bit offset, bit size (kind flag = 1)
             //
             // String section
             //
@@ -235,23 +259,28 @@ mod tests {
         let mut reader = Reader::new(&readable_buffer);
         let file_header = FileHeader::new(&mut reader).unwrap();
         let type_header = Header::new(&mut reader, &file_header).unwrap();
-        let union_type = Union::new(&mut reader, &file_header, type_header).unwrap();
+        let struct_type = Struct::new(&mut reader, &file_header, type_header).unwrap();
 
-        assert_eq!(*union_type.size(), 2);
-        assert!(!union_type.header().kind_flag());
-        assert_eq!(union_type.member_list().len(), 2);
+        assert_eq!(*struct_type.size(), 2);
+        assert!(struct_type.header().kind_flag());
+        assert_eq!(struct_type.member_list().len(), 2);
 
-        assert_eq!(union_type.member_list()[0].tid(), 2);
-        assert_eq!(union_type.member_list()[0].offset(), 8);
+        // The first member returns a `Offset::ByteOffset` offset because
+        // the specified bit offset is a multiple of 8 and the bit size is 0
+        assert_eq!(struct_type.member_list()[0].tid(), 2);
+        assert_eq!(struct_type.member_list()[0].offset(), Offset::ByteOffset(1));
         assert_eq!(
-            union_type.member_list()[0].name().as_deref(),
+            struct_type.member_list()[0].name().as_deref(),
             Some("value1")
         );
 
-        assert_eq!(union_type.member_list()[1].tid(), 3);
-        assert_eq!(union_type.member_list()[1].offset(), 8);
+        assert_eq!(struct_type.member_list()[1].tid(), 3);
         assert_eq!(
-            union_type.member_list()[1].name().as_deref(),
+            struct_type.member_list()[1].offset(),
+            Offset::BitOffsetAndSize(10, 11)
+        );
+        assert_eq!(
+            struct_type.member_list()[1].name().as_deref(),
             Some("value2")
         );
     }

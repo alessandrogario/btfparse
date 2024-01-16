@@ -41,6 +41,9 @@ pub enum ErrorKind {
 
     /// The specified BTF type id is not sized
     NotSized,
+
+    /// Found a bitfield in the middle of a type path resolution
+    UnexpectedBitfield,
 }
 
 /// An error type for the `reader` module

@@ -77,3 +77,6 @@ use file_header::*;
 
 mod string;
 use string::*;
+
+mod offset;
+pub use offset::*;

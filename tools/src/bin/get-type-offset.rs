@@ -41,5 +41,5 @@ fn main() {
         .offset_of(type_information.id_of(btf_type_name).unwrap(), type_path)
         .unwrap();
 
-    println!("{} => {}: {}", btf_type_name, type_path, offset);
+    println!("{} => {}: {:?}", btf_type_name, type_path, offset);
 }

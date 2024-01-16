@@ -1,12 +1,13 @@
 use crate::btf::{
     Array, Const, DataSec, DeclTag, Enum, Enum64, Error as BTFError, ErrorKind as BTFErrorKind,
-    FileHeader, Float, Func, FuncProto, Fwd, Header, Int, Kind, Ptr, Readable, Restrict,
+    FileHeader, Float, Func, FuncProto, Fwd, Header, Int, Kind, Offset, Ptr, Readable, Restrict,
     Result as BTFResult, Struct, TypeTag, Typedef, Union, Var, Volatile,
 };
 use crate::generate_constructor_dispatcher;
 use crate::utils::Reader;
 
 use std::collections::BTreeMap;
+use std::ops::Add;
 
 /// An enum representing a BTF type
 #[derive(Debug, Clone)]
@@ -155,45 +156,49 @@ macro_rules! offset_of_struct_and_union_helper {
         // Attempt to forward the request to any unnamed member (anonymous structs). If this
         // succeeds then we can just return the offset we get back, as it will consume the
         // entire path.
-        if let Some(final_offset) = $struct_or_union.member_list().iter().find_map(|member| {
-            if member.name().is_none() {
-                match $self.offset_of_helper($current_offset, member.tid(), $path.clone()) {
-                    Ok(inner_member_offset) => Some(member.offset() as usize + inner_member_offset),
-                    Err(_) => None,
+        for member in $struct_or_union
+            .member_list()
+            .iter()
+            .filter(|member| member.name().is_none())
+        {
+            match $self.offset_of_helper($current_offset, member.tid(), $path.clone()) {
+                Ok((tid, offset)) => {
+                    // We have found a match, and this offset is relative to the current
+                    // member
+                    let member_relative_offset = member.offset().add(offset)?;
+
+                    // Finally, add the offset we have accumulated so far
+                    return Ok((tid, $current_offset.add(member_relative_offset)?));
                 }
-            } else {
-                None
-            }
-        }) {
-            return Ok($current_offset + final_offset);
+
+                Err(_) => continue,
+            };
         }
 
         // Try again, this time looking for a named member that matches the current
         // path component
-        let (next_tid, member_offset) = $struct_or_union
+        match $struct_or_union
             .member_list()
             .iter()
-            .find_map(|member| {
-                member.name().map(|member_name| {
-                    if *$name == member_name {
-                        Some((member.tid(), member.offset() as usize))
-                    } else {
-                        None
-                    }
-                })?
-            })
-            .ok_or_else(|| {
-                BTFError::new(
+            .find(|member| match member.name() {
+                Some(member_name) => member_name == *$name,
+                None => false,
+            }) {
+            Some(member) => {
+                $current_type = member.tid();
+                $current_offset = $current_offset.add(member.offset())?;
+            }
+
+            None => {
+                return Err(BTFError::new(
                     BTFErrorKind::InvalidTypePath,
                     &format!(
                         "Type {:?} does not have a member named {}",
                         $struct_or_union, $name
                     ),
-                )
-            })?;
-
-        $current_type = next_tid;
-        $current_offset += member_offset;
+                ));
+            }
+        }
     };
 }
 
@@ -268,6 +273,30 @@ impl TypeInformation {
         self.id_to_name_map.get(&tid).cloned()
     }
 
+    /// Returns the pointee type id
+    pub fn pointee_tid(&self, tid: u32) -> BTFResult<u32> {
+        match self.from_id(tid) {
+            None => Err(BTFError::new(
+                BTFErrorKind::InvalidTypeID,
+                "Invalid type id",
+            )),
+
+            Some(type_variant) => match type_variant {
+                TypeVariant::Typedef(typedef) => self.pointee_tid(*typedef.tid()),
+                TypeVariant::Const(cnst) => self.pointee_tid(*cnst.tid()),
+                TypeVariant::Volatile(volatile) => self.pointee_tid(*volatile.tid()),
+                TypeVariant::Restrict(restrict) => self.pointee_tid(*restrict.tid()),
+
+                TypeVariant::Ptr(ptr) => Ok(*ptr.tid()),
+
+                _ => Err(BTFError::new(
+                    BTFErrorKind::InvalidTypeID,
+                    "Type is not a pointer",
+                )),
+            },
+        }
+    }
+
     /// Returns the size of the given type id
     pub fn size_of(&self, tid: u32) -> BTFResult<usize> {
         let type_variant = self.from_id(tid).ok_or(BTFError::new(
@@ -327,10 +356,10 @@ impl TypeInformation {
         }
     }
 
-    /// Returns the offset of the given type path
-    pub fn offset_of(&self, tid: u32, path: &str) -> BTFResult<usize> {
+    /// Returns a tuple containing the next type id and the current offset
+    pub fn offset_of(&self, tid: u32, path: &str) -> BTFResult<(u32, Offset)> {
         let path_component_list = Self::split_path_components(path)?;
-        self.offset_of_helper(0, tid, path_component_list)
+        self.offset_of_helper(Offset::ByteOffset(0), tid, path_component_list)
     }
 
     /// Splits the given type path into its components
@@ -455,12 +484,12 @@ impl TypeInformation {
     /// Internal helper method for `TypeInformation::offset_of`
     fn offset_of_helper(
         &self,
-        mut offset: usize,
+        mut offset: Offset,
         mut tid: u32,
         path: TypePath,
-    ) -> BTFResult<usize> {
+    ) -> BTFResult<(u32, Offset)> {
         if path.is_empty() {
-            return Ok(offset);
+            return Ok((tid, offset));
         }
 
         let type_var = self.from_id(tid).ok_or(BTFError::new(
@@ -519,7 +548,9 @@ impl TypeInformation {
 
                         let element_tid = *array.element_tid();
                         let element_type_size = self.size_of(element_tid)?;
-                        offset += index * element_type_size;
+
+                        let index_size = (index * element_type_size) as u32;
+                        offset = offset.add(index_size)?;
 
                         tid = element_tid;
                     }
@@ -677,8 +708,18 @@ mod tests {
                 None,
                 8,
                 vec![
-                    StructMember::create(1, Some(String::from("anon_struct_value1")), 1, 0),
-                    StructMember::create(1, Some(String::from("anon_struct_value2")), 1, 32),
+                    StructMember::create(
+                        1,
+                        Some(String::from("anon_struct_value1")),
+                        1,
+                        Offset::ByteOffset(0),
+                    ),
+                    StructMember::create(
+                        1,
+                        Some(String::from("anon_struct_value2")),
+                        1,
+                        Offset::ByteOffset(32),
+                    ),
                 ],
             )),
         );
@@ -691,8 +732,18 @@ mod tests {
                 None,
                 8,
                 vec![
-                    StructMember::create(1, Some(String::from("anon_union_value1")), 1, 0),
-                    StructMember::create(1, Some(String::from("anon_union_value2")), 2, 0),
+                    StructMember::create(
+                        1,
+                        Some(String::from("anon_union_value1")),
+                        1,
+                        Offset::ByteOffset(0),
+                    ),
+                    StructMember::create(
+                        1,
+                        Some(String::from("anon_union_value2")),
+                        2,
+                        Offset::ByteOffset(0),
+                    ),
                 ],
             )),
         );
@@ -705,10 +756,20 @@ mod tests {
                 Some(String::from("Struct")),
                 28,
                 vec![
-                    StructMember::create(0, None, 4, 0),
-                    StructMember::create(0, None, 5, 64),
-                    StructMember::create(1, Some(String::from("int_value")), 1, 128),
-                    StructMember::create(1, Some(String::from("ptr_value")), 2, 160),
+                    StructMember::create(0, None, 4, Offset::ByteOffset(0)),
+                    StructMember::create(0, None, 5, Offset::ByteOffset(64)),
+                    StructMember::create(
+                        1,
+                        Some(String::from("int_value")),
+                        1,
+                        Offset::ByteOffset(128),
+                    ),
+                    StructMember::create(
+                        1,
+                        Some(String::from("ptr_value")),
+                        2,
+                        Offset::ByteOffset(160),
+                    ),
                 ],
             )),
         );
@@ -724,8 +785,8 @@ mod tests {
                 Some(String::from("list_head")),
                 16,
                 vec![
-                    StructMember::create(1, Some(String::from("next")), 2, 0),
-                    StructMember::create(1, Some(String::from("prev")), 2, 64),
+                    StructMember::create(1, Some(String::from("next")), 2, Offset::ByteOffset(0)),
+                    StructMember::create(1, Some(String::from("prev")), 2, Offset::ByteOffset(64)),
                 ],
             )),
         );
@@ -1030,6 +1091,12 @@ mod tests {
     }
 
     #[test]
+    fn pointee_tid() {
+        let type_info = get_test_type_info();
+        assert_eq!(type_info.pointee_tid(2).unwrap(), 6);
+    }
+
+    #[test]
     fn test_offset_of() {
         let type_info = get_test_type_info();
 
@@ -1057,16 +1124,46 @@ mod tests {
             BTFErrorKind::InvalidTypePath
         );
 
-        assert_eq!(type_info.offset_of(3, "[0]").unwrap(), 0);
-        assert_eq!(type_info.offset_of(3, "[1]").unwrap(), 4);
-        assert_eq!(type_info.offset_of(3, "[2]").unwrap(), 8);
-        assert_eq!(type_info.offset_of(3, "[3]").unwrap(), 12);
-        assert_eq!(type_info.offset_of(3, "[4]").unwrap(), 16);
-        assert_eq!(type_info.offset_of(3, "[5]").unwrap(), 20);
-        assert_eq!(type_info.offset_of(3, "[6]").unwrap(), 24);
-        assert_eq!(type_info.offset_of(3, "[7]").unwrap(), 28);
-        assert_eq!(type_info.offset_of(3, "[8]").unwrap(), 32);
-        assert_eq!(type_info.offset_of(3, "[9]").unwrap(), 36);
+        assert_eq!(
+            type_info.offset_of(3, "[0]").unwrap(),
+            (1, Offset::ByteOffset(0))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[1]").unwrap(),
+            (1, Offset::ByteOffset(4))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[2]").unwrap(),
+            (1, Offset::ByteOffset(8))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[3]").unwrap(),
+            (1, Offset::ByteOffset(12))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[4]").unwrap(),
+            (1, Offset::ByteOffset(16))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[5]").unwrap(),
+            (1, Offset::ByteOffset(20))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[6]").unwrap(),
+            (1, Offset::ByteOffset(24))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[7]").unwrap(),
+            (1, Offset::ByteOffset(28))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[8]").unwrap(),
+            (1, Offset::ByteOffset(32))
+        );
+        assert_eq!(
+            type_info.offset_of(3, "[9]").unwrap(),
+            (1, Offset::ByteOffset(36))
+        );
 
         assert_eq!(
             type_info.offset_of(3, "[10]").unwrap_err().kind(),
@@ -1076,36 +1173,35 @@ mod tests {
         // Named struct and the typedef/const/volatile/restrict that reference it
         for struct_tid in [6, 11, 12, 13, 14] {
             let int_value_offset = type_info.offset_of(struct_tid, "int_value").unwrap();
-
-            assert_eq!(int_value_offset, 16 * 8);
+            assert_eq!(int_value_offset, (1, Offset::ByteOffset(16 * 8)));
 
             let ptr_value_offset = type_info.offset_of(struct_tid, "ptr_value").unwrap();
 
-            assert_eq!(ptr_value_offset, 20 * 8);
+            assert_eq!(ptr_value_offset, (2, Offset::ByteOffset(20 * 8)));
 
             let anon_struct_value1_offset = type_info
                 .offset_of(struct_tid, "anon_struct_value1")
                 .unwrap();
 
-            assert_eq!(anon_struct_value1_offset, 0);
+            assert_eq!(anon_struct_value1_offset, (1, Offset::ByteOffset(0)));
 
             let anon_struct_value2_offset = type_info
                 .offset_of(struct_tid, "anon_struct_value2")
                 .unwrap();
 
-            assert_eq!(anon_struct_value2_offset, 4 * 8);
+            assert_eq!(anon_struct_value2_offset, (1, Offset::ByteOffset(4 * 8)));
 
             let anon_union_value1_offset = type_info
                 .offset_of(struct_tid, "anon_union_value1")
                 .unwrap();
 
-            assert_eq!(anon_union_value1_offset, 8 * 8);
+            assert_eq!(anon_union_value1_offset, (1, Offset::ByteOffset(8 * 8)));
 
             let anon_union_value2_offset = type_info
                 .offset_of(struct_tid, "anon_union_value2")
                 .unwrap();
 
-            assert_eq!(anon_union_value2_offset, 8 * 8);
+            assert_eq!(anon_union_value2_offset, (2, Offset::ByteOffset(8 * 8)));
         }
     }
 }
