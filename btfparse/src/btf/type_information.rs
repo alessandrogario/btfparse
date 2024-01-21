@@ -161,14 +161,13 @@ macro_rules! offset_of_struct_and_union_helper {
             .iter()
             .filter(|member| member.name().is_none())
         {
-            match $self.offset_of_helper($current_offset, member.tid(), $path.clone()) {
+            match $self.offset_of_helper(
+                member.offset().add($current_offset)?,
+                member.tid(),
+                $path.clone(),
+            ) {
                 Ok((tid, offset)) => {
-                    // We have found a match, and this offset is relative to the current
-                    // member
-                    let member_relative_offset = member.offset().add(offset)?;
-
-                    // Finally, add the offset we have accumulated so far
-                    return Ok((tid, $current_offset.add(member_relative_offset)?));
+                    return Ok((tid, offset));
                 }
 
                 Err(_) => continue,
@@ -666,7 +665,7 @@ mod tests {
                 false,
                 false,
                 0,
-                4,
+                32,
             )),
         );
 
@@ -704,7 +703,7 @@ mod tests {
         type_info.id_to_type_map.insert(
             4,
             TypeVariant::Struct(Struct::create(
-                Header::create(Kind::Struct, 1, 2, false, 8),
+                Header::create(Kind::Struct, 0, 2, false, 8),
                 None,
                 8,
                 vec![
@@ -728,7 +727,7 @@ mod tests {
         type_info.id_to_type_map.insert(
             5,
             TypeVariant::Union(Union::create(
-                Header::create(Kind::Union, 1, 2, true, 8),
+                Header::create(Kind::Union, 0, 2, true, 8),
                 None,
                 8,
                 vec![
@@ -1013,6 +1012,109 @@ mod tests {
             .id_to_name_map
             .insert(21, String::from("type_tag"));
 
+        // Additional nested structs/unions scenario:
+        //
+        // struct qstr {
+        //   union {
+        //     struct {
+        //       int hash;
+        //       int len;
+        //     }
+        //
+        //     unsigned long int hash_len;
+        //   }
+        //
+        //   unsigned long int name;
+        // }
+        //
+        // struct dentry {
+        //   int test1;
+        //   struct qstr d_name;
+        //   int test2;
+        // }
+
+        type_info.id_to_type_map.insert(
+            100,
+            TypeVariant::Int(Int::create(
+                Header::create(Kind::Int, 1, 0, false, 8),
+                Some(String::from("unsigned long int")),
+                8,
+                false,
+                false,
+                false,
+                0,
+                64,
+            )),
+        );
+
+        type_info.id_to_type_map.insert(
+            101,
+            TypeVariant::Struct(Struct::create(
+                Header::create(Kind::Struct, 0, 2, false, 8),
+                None,
+                8,
+                vec![
+                    StructMember::create(1, Some(String::from("hash")), 1, Offset::ByteOffset(0)),
+                    StructMember::create(1, Some(String::from("len")), 1, Offset::ByteOffset(4)),
+                ],
+            )),
+        );
+
+        type_info.id_to_type_map.insert(
+            102,
+            TypeVariant::Union(Union::create(
+                Header::create(Kind::Union, 0, 2, false, 8),
+                None,
+                8,
+                vec![
+                    StructMember::create(0, None, 101, Offset::ByteOffset(0)),
+                    StructMember::create(
+                        1,
+                        Some(String::from("hash_len")),
+                        100,
+                        Offset::ByteOffset(0),
+                    ),
+                ],
+            )),
+        );
+
+        type_info.id_to_type_map.insert(
+            103,
+            TypeVariant::Struct(Struct::create(
+                Header::create(Kind::Struct, 1, 2, false, 8),
+                Some(String::from("qstr")),
+                8,
+                vec![
+                    StructMember::create(0, None, 102, Offset::ByteOffset(0)),
+                    StructMember::create(1, Some(String::from("name")), 100, Offset::ByteOffset(8)),
+                ],
+            )),
+        );
+
+        type_info.id_to_type_map.insert(
+            104,
+            TypeVariant::Struct(Struct::create(
+                Header::create(Kind::Struct, 1, 3, false, 16),
+                Some(String::from("dentry")),
+                8,
+                vec![
+                    StructMember::create(1, Some(String::from("test1")), 1, Offset::ByteOffset(0)),
+                    StructMember::create(
+                        1,
+                        Some(String::from("d_name")),
+                        103,
+                        Offset::ByteOffset(32),
+                    ),
+                    StructMember::create(
+                        1,
+                        Some(String::from("test2")),
+                        1,
+                        Offset::ByteOffset(256),
+                    ),
+                ],
+            )),
+        );
+
         type_info
     }
 
@@ -1203,5 +1305,40 @@ mod tests {
 
             assert_eq!(anon_union_value2_offset, (2, Offset::ByteOffset(8 * 8)));
         }
+
+        assert_eq!(
+            type_info.offset_of(104, "test1").unwrap(),
+            (1, Offset::ByteOffset(0))
+        );
+
+        assert_eq!(
+            type_info.offset_of(104, "d_name").unwrap(),
+            (103, Offset::ByteOffset(32))
+        );
+
+        assert_eq!(
+            type_info.offset_of(104, "test2").unwrap(),
+            (1, Offset::ByteOffset(256))
+        );
+
+        assert_eq!(
+            type_info.offset_of(104, "d_name.hash").unwrap(),
+            (1, Offset::ByteOffset(32))
+        );
+
+        assert_eq!(
+            type_info.offset_of(104, "d_name.len").unwrap(),
+            (1, Offset::ByteOffset(36))
+        );
+
+        assert_eq!(
+            type_info.offset_of(104, "d_name.hash_len").unwrap(),
+            (100, Offset::ByteOffset(32))
+        );
+
+        assert_eq!(
+            type_info.offset_of(104, "d_name.name").unwrap(),
+            (100, Offset::ByteOffset(40))
+        );
     }
 }
