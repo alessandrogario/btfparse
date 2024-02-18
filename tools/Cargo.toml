@@ -10,6 +10,12 @@
 name = "tools"
 version = "1.3.0"
 edition = "2021"
+license = "Apache-2.0"
+description = "Example tools for the btfparse crate"
+homepage = "https://github.com/alessandrogario"
+repository = "https://github.com/alessandrogario/btfparse/"
+keywords = ["bpf", "btf"]
+category = "development-tools"
 
 [dependencies]
 btfparse = { path = "../btfparse" }
