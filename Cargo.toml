@@ -17,3 +17,8 @@ homepage = "https://github.com/alessandrogario"
 repository = "https://github.com/alessandrogario/btfparse/"
 keywords = ["bpf", "btf"]
 categories = ["development-tools"]
+
+exclude = [
+  ".gitignore",
+  ".github/*"
+]
