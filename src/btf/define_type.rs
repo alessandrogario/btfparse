@@ -9,7 +9,7 @@
 #[macro_export]
 macro_rules! define_type {
     ($name:ident, $type:ty, $($data_name:ident: $data_type:ty),+) => {
-        /// Represents a `$name` type
+        #[doc = concat!(" Represents a `", stringify!($name), "` type.")]
         #[derive(Debug, Clone)]
         pub struct $name {
             /// Type header
