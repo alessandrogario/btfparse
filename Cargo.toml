@@ -6,10 +6,14 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-[workspace]
-resolver = "2"
-
-members = [
-  "btfparse",
-  "tools",
-]
+[package]
+name = "btfparse"
+version = "1.3.0"
+edition = "2021"
+readme = "README.md"
+license = "Apache-2.0"
+description = "A BTF parser library capable of navigating types"
+homepage = "https://github.com/alessandrogario"
+repository = "https://github.com/alessandrogario/btfparse/"
+keywords = ["bpf", "btf"]
+categories = ["development-tools"]
