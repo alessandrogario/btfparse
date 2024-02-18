@@ -22,7 +22,7 @@ pub enum Offset {
 
 /// Implements the `Add<u32>` trait for `Offset`
 impl Add<u32> for Offset {
-    /// A BTFResult<Offset> type, because this operation can fail
+    /// A `BTFResult<Offset>` type, because this operation can fail
     type Output = BTFResult<Self>;
 
     /// Adds the given value to the member offset. This operation will fail if `self` is a bitfields
@@ -40,7 +40,7 @@ impl Add<u32> for Offset {
 
 /// Implements the `Add<Offset>` trait for `Offset`
 impl Add<Offset> for Offset {
-    /// A BTFResult<Offset> type, because this operation can fail
+    /// A `BTFResult<Offset>` type, because this operation can fail
     type Output = BTFResult<Self>;
 
     /// Adds the given `Offset` to `self`. This operation will fail if both `self` and `rhs` are bitfields
