@@ -45,5 +45,6 @@ jobs:
             ${{ steps.build_type.outputs.VALUE }} \
             --all-targets \
             --all-features \
+            --examples \
             --tests \
             --workspace
