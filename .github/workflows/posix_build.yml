@@ -42,15 +42,17 @@ jobs:
       - name: Build the project
         run: |
           cargo build \
+            --examples \
             ${{ steps.build_type.outputs.VALUE }}
 
       - name: Run the tests
         run: |
           cargo test \
+            --examples \
             ${{ steps.build_type.outputs.VALUE }}
 
       - name: Run dump-btf against /sys/kernel/btf/vmlinux
         run: |
-          cargo run --bin dump-btf -- \
+          cargo run --example dump-btf -- \
             ${{ steps.build_type.outputs.VALUE }} \
             "/sys/kernel/btf/vmlinux"
