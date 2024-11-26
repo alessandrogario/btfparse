@@ -817,6 +817,7 @@ mod tests {
                     name: String::from("Enum32Value1"),
                     value: IntegerValue32::Unsigned(0),
                 }],
+                false,
             )),
         );
 
@@ -834,6 +835,7 @@ mod tests {
                     name: String::from("Enum64Value1"),
                     value: IntegerValue64::Unsigned(0),
                 }],
+                false,
             )),
         );
 

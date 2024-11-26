@@ -32,7 +32,7 @@ pub struct NamedValue {
     /// The name of the value
     pub name: String,
 
-    /// The signed value
+    /// The integer value
     pub value: IntegerValue,
 }
 
@@ -50,6 +50,9 @@ struct Data {
 
     /// A list of enum values
     named_value_list: NamedValueList,
+
+    /// True if the enum is signed
+    signed: bool,
 }
 
 impl Data {
@@ -96,6 +99,7 @@ impl Data {
             name,
             size: type_header.size_or_type() as usize,
             named_value_list,
+            signed,
         })
     }
 }
@@ -103,7 +107,8 @@ impl Data {
 define_type!(Enum, Data,
     name: Option<String>,
     size: usize,
-    named_value_list: NamedValueList
+    named_value_list: NamedValueList,
+    signed: bool
 );
 
 #[cfg(test)]
@@ -151,6 +156,7 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let r#enum = Enum::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(*r#enum.size(), 4);
+        assert!(!*r#enum.signed());
         assert!(!r#enum.header().kind_flag());
         assert_eq!(r#enum.name().as_deref(), Some("State"));
 
@@ -207,6 +213,7 @@ mod tests {
         let type_header = Header::new(&mut reader, &file_header).unwrap();
         let r#enum = Enum::new(&mut reader, &file_header, type_header).unwrap();
         assert_eq!(*r#enum.size(), 4);
+        assert!(*r#enum.signed());
         assert!(r#enum.header().kind_flag());
         assert_eq!(r#enum.name().as_deref(), Some("State"));
 
