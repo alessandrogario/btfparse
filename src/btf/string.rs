@@ -41,9 +41,9 @@ pub fn parse_string(
             ));
         }
 
-        let character = reader.u8().map_err(|err| {
+        let character = reader.u8().inspect_err(|_error| {
+            // Restore the original offset in case of error
             reader.set_offset(original_offset);
-            err
         })? as char;
 
         if character == '\0' {
