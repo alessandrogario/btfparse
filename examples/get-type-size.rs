@@ -40,15 +40,12 @@ fn main() {
     let btf_file_path = Path::new(&argument_list[1]);
     let btf_type_name = &argument_list[2];
 
-    println!("Opening BTF file: {:?}", btf_file_path);
+    println!("Opening BTF file: {btf_file_path:?}");
 
     let vmlinux_btf_file = ReadableFile::new(btf_file_path);
     let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
 
     let type_id = type_information.id_of(btf_type_name).unwrap();
     let type_size = type_information.size_of(type_id).unwrap();
-    println!(
-        "Type {} has ID {} and requires {} bytes in total",
-        btf_type_name, type_id, type_size
-    );
+    println!("Type {btf_type_name} has ID {type_id} and requires {type_size} bytes in total");
 }

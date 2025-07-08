@@ -95,7 +95,7 @@ impl Kind {
 
             _ => Err(BTFError::new(
                 BTFErrorKind::InvalidBTFKind,
-                &format!("Invalid BTF kind value: 0x{:04X}", value),
+                &format!("Invalid BTF kind value: 0x{value:04X}"),
             )),
         }
     }

@@ -358,7 +358,7 @@ impl TypeInformation {
 
             _ => Err(BTFError::new(
                 BTFErrorKind::NotSized,
-                &format!("Type {:?} has no size", type_variant),
+                &format!("Type {type_variant:?} has no size"),
             )),
         }
     }
@@ -416,7 +416,7 @@ impl TypeInformation {
                     } else {
                         return Err(BTFError::new(
                             BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {}", index),
+                            &format!("Invalid character at index {index}"),
                         ));
                     }
 
@@ -427,7 +427,7 @@ impl TypeInformation {
                     if !c.is_alphabetic() {
                         return Err(BTFError::new(
                             BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {}", index),
+                            &format!("Invalid character at index {index}"),
                         ));
                     }
 
@@ -447,7 +447,7 @@ impl TypeInformation {
                     } else {
                         return Err(BTFError::new(
                             BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {}", index),
+                            &format!("Invalid character at index {index}"),
                         ));
                     }
                 }
@@ -461,7 +461,7 @@ impl TypeInformation {
                     } else {
                         return Err(BTFError::new(
                             BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {}", index),
+                            &format!("Invalid character at index {index}"),
                         ));
                     }
                 }
@@ -474,7 +474,7 @@ impl TypeInformation {
                     } else {
                         return Err(BTFError::new(
                             BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {}", index),
+                            &format!("Invalid character at index {index}"),
                         ));
                     }
                 }
@@ -546,8 +546,7 @@ impl TypeInformation {
                             return Err(BTFError::new(
                                 BTFErrorKind::InvalidTypePath,
                                 &format!(
-                                    "Index {} is out of bounds for array of size {}",
-                                    index,
+                                    "Index {index} is out of bounds for array of size {}",
                                     array.element_count()
                                 ),
                             ));
@@ -565,11 +564,11 @@ impl TypeInformation {
                     type_var => {
                         let error_message = match type_var {
                             TypeVariant::Ptr(_) => {
-                                format!("Type {:?} is a ptr, and dereferencing it would require a read operation", type_var)
+                                format!("Type {type_var:?} is a ptr, and dereferencing it would require a read operation")
                             }
 
                             _ => {
-                                format!("Type {:?} is not indexable", type_var)
+                                format!("Type {type_var:?} is not indexable")
                             }
                         };
 
@@ -591,7 +590,7 @@ impl TypeInformation {
                     _ => {
                         return Err(BTFError::new(
                             BTFErrorKind::InvalidTypePath,
-                            &format!("Type {:?} is not a struct or union", type_var),
+                            &format!("Type {type_var:?} is not a struct or union"),
                         ));
                     }
                 };

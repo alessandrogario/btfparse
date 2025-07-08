@@ -32,7 +32,7 @@ pub struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     /// Creates a new `Reader` instance
-    pub fn new(readable: &'a dyn Readable) -> Reader {
+    pub fn new(readable: &'a dyn Readable) -> Reader<'a> {
         Reader {
             readable,
             offset: 0,
