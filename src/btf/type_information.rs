@@ -608,8 +608,8 @@ mod tests {
     use super::*;
     use crate::btf::{
         data_sec::Variable as DataSecVariable,
-        enum64::{IntegerValue as IntegerValue64, NamedValue as NamedValue64},
-        r#enum::{IntegerValue as IntegerValue32, NamedValue as NamedValue32},
+        enum64::{Integer64Value as IntegerValue64, NamedValue64},
+        r#enum::{Integer32Value as IntegerValue32, NamedValue32},
         struct_union::Member as StructMember,
         LinkageType,
     };

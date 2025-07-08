@@ -18,7 +18,7 @@ const ENUM64_VALUE_SIZE: usize = 12;
 
 /// Represents an enum value
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IntegerValue {
+pub enum Integer64Value {
     /// The signed value
     Signed(i64),
 
@@ -28,16 +28,16 @@ pub enum IntegerValue {
 
 /// Represents a single enum value
 #[derive(Debug, Clone)]
-pub struct NamedValue {
+pub struct NamedValue64 {
     /// The name of the value
     pub name: String,
 
     /// The integer value
-    pub value: IntegerValue,
+    pub value: Integer64Value,
 }
 
 /// Represents a list of enum values
-pub type NamedValueList = Vec<NamedValue>;
+pub type NamedValue64List = Vec<NamedValue64>;
 
 /// Enum data
 #[derive(Debug, Clone)]
@@ -49,7 +49,7 @@ struct Data {
     size: usize,
 
     /// A list of enum values
-    named_value_list: NamedValueList,
+    named_value_list: NamedValue64List,
 
     /// True if the enum is signed
     signed: bool,
@@ -68,18 +68,18 @@ impl Data {
         type_header: &Header,
     ) -> BTFResult<Self> {
         let signed = type_header.kind_flag();
-        let mut named_value_list = NamedValueList::new();
+        let mut named_value_list = NamedValue64List::new();
 
         for _ in 0..type_header.vlen() {
             let name_offset = reader.u32()?;
             let value_name = parse_string(reader, file_header, name_offset)?;
 
             let value = match signed {
-                true => IntegerValue::Signed(reader.i64()?),
-                false => IntegerValue::Unsigned(reader.u64()?),
+                true => Integer64Value::Signed(reader.i64()?),
+                false => Integer64Value::Unsigned(reader.u64()?),
             };
 
-            named_value_list.push(NamedValue {
+            named_value_list.push(NamedValue64 {
                 name: value_name,
                 value,
             });
@@ -107,13 +107,13 @@ impl Data {
 define_type!(Enum64, Data,
     name: Option<String>,
     size: usize,
-    named_value_list: NamedValueList,
+    named_value_list: NamedValue64List,
     signed: bool
 );
 
 #[cfg(test)]
 mod tests {
-    use super::{Enum64, IntegerValue};
+    use super::{Enum64, Integer64Value};
     use crate::btf::{FileHeader, Header, Type};
     use crate::utils::{ReadableBuffer, Reader};
 
@@ -164,13 +164,13 @@ mod tests {
         assert_eq!(enum64.named_value_list()[0].name, "Paused");
         assert_eq!(
             enum64.named_value_list()[0].value,
-            IntegerValue::Unsigned(254)
+            Integer64Value::Unsigned(254)
         );
 
         assert_eq!(enum64.named_value_list()[1].name, "Running");
         assert_eq!(
             enum64.named_value_list()[1].value,
-            IntegerValue::Unsigned(254)
+            Integer64Value::Unsigned(254)
         );
     }
 
@@ -221,13 +221,13 @@ mod tests {
         assert_eq!(enum64.named_value_list()[0].name, "Paused");
         assert_eq!(
             enum64.named_value_list()[0].value,
-            IntegerValue::Signed(254)
+            Integer64Value::Signed(254)
         );
 
         assert_eq!(enum64.named_value_list()[1].name, "Running");
         assert_eq!(
             enum64.named_value_list()[1].value,
-            IntegerValue::Signed(254)
+            Integer64Value::Signed(254)
         );
     }
 }
