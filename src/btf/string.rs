@@ -22,7 +22,7 @@ pub fn parse_string(
     if string_offset >= string_section_end {
         return Err(BTFError::new(
             BTFErrorKind::InvalidStringOffset,
-            &format!("Invalid string offset 0x{:08X}", string_offset),
+            &format!("Invalid string offset 0x{string_offset:08X}"),
         ));
     }
 
@@ -34,10 +34,7 @@ pub fn parse_string(
         if reader.offset() + 1 > string_section_end as usize {
             return Err(BTFError::new(
                 BTFErrorKind::InvalidString,
-                &format!(
-                    "String at offset 0x{:08X} is not correctly null terminated",
-                    string_offset
-                ),
+                &format!("String at offset 0x{string_offset:08X} is not correctly null terminated",),
             ));
         }
 

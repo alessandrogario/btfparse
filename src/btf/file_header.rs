@@ -106,7 +106,7 @@ impl FileHeader {
 
             magic_value => Err(BTFError::new(
                 BTFErrorKind::InvalidMagic,
-                &format!("Invalid magic number: 0x{:04X}", magic_value),
+                &format!("Invalid magic number: 0x{magic_value:04X}"),
             )),
         }
     }

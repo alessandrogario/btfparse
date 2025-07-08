@@ -38,7 +38,7 @@ fn main() {
     }
 
     let btf_file_path = Path::new(&argument_list[1]);
-    println!("Opening BTF file: {:?}", btf_file_path);
+    println!("Opening BTF file: {btf_file_path:?}");
 
     let vmlinux_btf_file = ReadableFile::new(btf_file_path);
     let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();

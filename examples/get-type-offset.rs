@@ -41,7 +41,7 @@ fn main() {
     let btf_type_name = &argument_list[2];
     let type_path = &argument_list[3];
 
-    println!("Opening BTF file: {:?}", btf_file_path);
+    println!("Opening BTF file: {btf_file_path:?}");
 
     let vmlinux_btf_file = ReadableFile::new(btf_file_path);
     let type_information = TypeInformation::new(&vmlinux_btf_file).unwrap();
@@ -49,5 +49,5 @@ fn main() {
         .offset_of(type_information.id_of(btf_type_name).unwrap(), type_path)
         .unwrap();
 
-    println!("{} => {}: {:?}", btf_type_name, type_path, offset);
+    println!("{btf_type_name} => {type_path}: {offset:?}");
 }
