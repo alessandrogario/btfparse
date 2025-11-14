@@ -68,4 +68,42 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), BTFErrorKind::InvalidOffset);
     }
+
+    #[test]
+    fn test_valid_read_at_boundary() {
+        let data = vec![0x41, 0x42, 0x43, 0x44];
+        let readable_buffer = ReadableBuffer::new(&data);
+
+        let mut buffer = vec![0u8; 4];
+        let result = readable_buffer.read(0, &mut buffer);
+        assert!(result.is_ok());
+        assert_eq!(buffer, vec![0x41, 0x42, 0x43, 0x44]);
+
+        let mut buffer = vec![0u8; 1];
+        let result = readable_buffer.read(3, &mut buffer);
+        assert!(result.is_ok());
+        assert_eq!(buffer, vec![0x44]);
+    }
+
+    #[test]
+    fn test_eof_error() {
+        let data = vec![0x41, 0x42, 0x43, 0x44];
+        let readable_buffer = ReadableBuffer::new(&data);
+
+        let mut buffer = vec![0u8; 1];
+        let result = readable_buffer.read(4, &mut buffer);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), BTFErrorKind::EOF);
+    }
+
+    #[test]
+    fn test_invalid_offset_beyond_buffer() {
+        let data = vec![0x41, 0x42, 0x43, 0x44];
+        let readable_buffer = ReadableBuffer::new(&data);
+
+        let mut buffer = vec![0u8; 2];
+        let result = readable_buffer.read(3, &mut buffer);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), BTFErrorKind::InvalidOffset);
+    }
 }
