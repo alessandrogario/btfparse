@@ -28,7 +28,15 @@ impl<'a> Readable for ReadableBuffer<'a> {
             ));
         }
 
-        let source_end_offset = source_start_offset + buffer.len();
+        let source_end_offset = source_start_offset
+            .checked_add(buffer.len())
+            .ok_or_else(|| {
+                BTFError::new(
+                    BTFErrorKind::InvalidOffset,
+                    "Buffer offset addition overflow",
+                )
+            })?;
+
         match source_end_offset.cmp(&self.buffer.len()) {
             std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
                 let source_slice = &self.buffer[source_start_offset..source_end_offset];
@@ -42,5 +50,22 @@ impl<'a> Readable for ReadableBuffer<'a> {
                 "There are not enough bytes left to complete the read request",
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_buffer_offset_overflow() {
+        // Test overflow when calculating source_end_offset (source_start_offset + buffer.len())
+        let data = vec![0u8; 100];
+        let readable_buffer = ReadableBuffer::new(&data);
+
+        let mut buffer = vec![0u8; 100];
+        let result = readable_buffer.read(usize::MAX as u64 - 50, &mut buffer);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), BTFErrorKind::InvalidOffset);
     }
 }
