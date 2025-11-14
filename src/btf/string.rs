@@ -6,8 +6,10 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Result as BTFResult};
-use crate::utils::Reader;
+use crate::{
+    btf::{Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Result as BTFResult},
+    utils::Reader,
+};
 
 /// Returns the string at offset `string_offset`
 pub fn parse_string(

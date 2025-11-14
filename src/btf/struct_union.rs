@@ -6,12 +6,14 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use crate::btf::{
-    parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Offset,
-    Result as BTFResult, Type,
+use crate::{
+    btf::{
+        parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+        Offset, Result as BTFResult, Type,
+    },
+    define_type,
+    utils::Reader,
 };
-use crate::define_type;
-use crate::utils::Reader;
 
 /// The size required to hold the extra data for a single member
 const MEMBER_VALUE_SIZE: usize = 12;

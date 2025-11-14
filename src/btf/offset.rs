@@ -6,9 +6,9 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use std::ops::Add;
-
 use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResult};
+
+use std::ops::Add;
 
 /// The location of a member
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
