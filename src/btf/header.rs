@@ -6,10 +6,10 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use crate::btf::{
-    Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind, Result as BTFResult,
+use crate::{
+    btf::{Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Kind, Result as BTFResult},
+    utils::Reader,
 };
-use crate::utils::Reader;
 
 /// Type header size
 const TYPE_HEADER_SIZE: usize = 12;

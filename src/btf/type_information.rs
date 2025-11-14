@@ -6,16 +6,17 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use crate::btf::{
-    Array, Const, DataSec, DeclTag, Enum, Enum64, Error as BTFError, ErrorKind as BTFErrorKind,
-    FileHeader, Float, Func, FuncProto, Fwd, Header, Int, Kind, Offset, Ptr, Readable, Restrict,
-    Result as BTFResult, Struct, TypeTag, Typedef, Union, Var, Volatile,
+use crate::{
+    btf::{
+        Array, Const, DataSec, DeclTag, Enum, Enum64, Error as BTFError, ErrorKind as BTFErrorKind,
+        FileHeader, Float, Func, FuncProto, Fwd, Header, Int, Kind, Offset, Ptr, Readable,
+        Restrict, Result as BTFResult, Struct, TypeTag, Typedef, Union, Var, Volatile,
+    },
+    generate_constructor_dispatcher,
+    utils::Reader,
 };
-use crate::generate_constructor_dispatcher;
-use crate::utils::Reader;
 
-use std::collections::BTreeMap;
-use std::ops::Add;
+use std::{collections::BTreeMap, ops::Add};
 
 /// An enum representing a BTF type
 #[derive(Debug, Clone)]

@@ -6,12 +6,14 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use crate::btf::{
-    Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Result as BTFResult,
-    Type,
+use crate::{
+    btf::{
+        Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+        Result as BTFResult, Type,
+    },
+    define_type,
+    utils::Reader,
 };
-use crate::define_type;
-use crate::utils::Reader;
 
 /// Const data
 #[derive(Debug, Clone)]

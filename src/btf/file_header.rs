@@ -6,8 +6,10 @@
   the LICENSE file found in the root directory of this source tree.
 */
 
-use crate::btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResult};
-use crate::utils::{Endianness as ReaderEndianness, Reader};
+use crate::{
+    btf::{Error as BTFError, ErrorKind as BTFErrorKind, Result as BTFResult},
+    utils::{Endianness as ReaderEndianness, Reader},
+};
 
 /// BTF magic number (little endian)
 const BTF_LITTLE_ENDIAN_MAGIC: u16 = 0xEB9F;
