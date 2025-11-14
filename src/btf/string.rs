@@ -15,10 +15,31 @@ pub fn parse_string(
     file_header: &FileHeader,
     string_offset: u32,
 ) -> BTFResult<String> {
-    let string_section_start = file_header.hdr_len() + file_header.str_off();
-    let string_section_end = string_section_start + file_header.str_len();
+    let string_section_start = file_header
+        .hdr_len()
+        .checked_add(file_header.str_off())
+        .ok_or_else(|| {
+            BTFError::new(
+                BTFErrorKind::InvalidStringOffset,
+                "String section start offset overflow",
+            )
+        })?;
 
-    let string_offset = string_section_start + string_offset;
+    let string_section_end = string_section_start
+        .checked_add(file_header.str_len())
+        .ok_or_else(|| {
+            BTFError::new(
+                BTFErrorKind::InvalidStringOffset,
+                "String section end offset overflow",
+            )
+        })?;
+
+    let string_offset = string_section_start
+        .checked_add(string_offset)
+        .ok_or_else(|| {
+            BTFError::new(BTFErrorKind::InvalidStringOffset, "String offset overflow")
+        })?;
+
     if string_offset >= string_section_end {
         return Err(BTFError::new(
             BTFErrorKind::InvalidStringOffset,
@@ -98,5 +119,89 @@ mod tests {
         assert_eq!(valid_string, "EFGH");
 
         assert!(parse_string(&mut reader, &file_header, 11).is_err());
+    }
+
+    #[test]
+    fn test_string_section_start_overflow() {
+        // Test overflow when calculating string section start (hdr_len + str_off)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0x18, 0x00, 0x00, 0x00, // hdr_len
+            0x00, 0x00, 0x00, 0x00, // type_off
+            0x01, 0x00, 0x00, 0x00, // type_len
+            0xFF, 0xFF, 0xFF, 0xFF, // str_off
+            0x01, 0x00, 0x00, 0x00, // str_len
+        ]);
+
+        let mut reader = Reader::new(&readable_buffer);
+        let file_header = FileHeader::new(&mut reader).unwrap();
+
+        let result = parse_string(&mut reader, &file_header, 0);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().kind(),
+            crate::btf::ErrorKind::InvalidStringOffset
+        );
+    }
+
+    #[test]
+    fn test_string_section_end_overflow() {
+        // Test overflow when calculating string section end (start + str_len)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0x18, 0x00, 0x00, 0x00, // hdr_len
+            0x00, 0x00, 0x00, 0x00, // type_off
+            0x01, 0x00, 0x00, 0x00, // type_len
+            0x00, 0x00, 0x00, 0xFF, // str_off
+            0xFF, 0xFF, 0xFF, 0x01, // str_len
+        ]);
+
+        let mut reader = Reader::new(&readable_buffer);
+        let file_header = FileHeader::new(&mut reader).unwrap();
+
+        let result = parse_string(&mut reader, &file_header, 0);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().kind(),
+            crate::btf::ErrorKind::InvalidStringOffset
+        );
+    }
+
+    #[test]
+    fn test_string_offset_overflow() {
+        // Test overflow when calculating string offset (string_section_start + string_offset)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0x18, 0x00, 0x00, 0x00, // hdr_len
+            0x00, 0x00, 0x00, 0x00, // type_off
+            0x01, 0x00, 0x00, 0x00, // type_len
+            0x00, 0x00, 0x00, 0x80, // str_off
+            0x01, 0x00, 0x00, 0x00, // str_len
+        ]);
+
+        let mut reader = Reader::new(&readable_buffer);
+        let file_header = FileHeader::new(&mut reader).unwrap();
+
+        let result = parse_string(&mut reader, &file_header, 0x80000000);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().kind(),
+            crate::btf::ErrorKind::InvalidStringOffset
+        );
     }
 }
