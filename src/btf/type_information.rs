@@ -215,8 +215,24 @@ impl TypeInformation {
         let mut reader = Reader::new(readable);
 
         let file_header = FileHeader::new(&mut reader)?;
-        let type_section_start = (file_header.hdr_len() + file_header.type_off()) as usize;
-        let type_section_end = type_section_start + (file_header.type_len() as usize);
+        let type_section_start = (file_header
+            .hdr_len()
+            .checked_add(file_header.type_off())
+            .ok_or_else(|| {
+                BTFError::new(
+                    BTFErrorKind::InvalidTypeSectionOffset,
+                    "Type section start offset overflow",
+                )
+            })?) as usize;
+
+        let type_section_end = type_section_start
+            .checked_add(file_header.type_len() as usize)
+            .ok_or_else(|| {
+                BTFError::new(
+                    BTFErrorKind::InvalidTypeSectionOffset,
+                    "Type section end offset overflow",
+                )
+            })?;
 
         reader.set_offset(type_section_start);
 
@@ -555,7 +571,16 @@ impl TypeInformation {
                         let element_tid = *array.element_tid();
                         let element_type_size = self.size_of(element_tid)?;
 
-                        let index_size = (index * element_type_size) as u32;
+                        let index_size = (index as u64)
+                            .checked_mul(element_type_size as u64)
+                            .and_then(|v| u32::try_from(v).ok())
+                            .ok_or_else(|| {
+                                BTFError::new(
+                                    BTFErrorKind::InvalidTypePath,
+                                    "Array element offset overflow",
+                                )
+                            })?;
+
                         offset = offset.add(index_size)?;
 
                         tid = element_tid;
@@ -613,6 +638,7 @@ mod tests {
         struct_union::Member as StructMember,
         LinkageType,
     };
+    use crate::utils::ReadableBuffer;
 
     #[test]
     fn test_split_path_components() {
@@ -1349,5 +1375,93 @@ mod tests {
             type_info.offset_of(104, "d_name.name").unwrap(),
             (100, Offset::ByteOffset(40))
         );
+    }
+
+    #[test]
+    fn test_type_section_offset_overflow() {
+        // Test overflow when calculating type section start (hdr_len + type_off)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0xFF, 0xFF, 0xFF, 0x7F, // hdr_len
+            0xFF, 0xFF, 0xFF, 0x7F, // type_off
+            0x01, 0x00, 0x00, 0x00, // type_len
+            0x00, 0x00, 0x00, 0x00, // str_off
+            0x01, 0x00, 0x00, 0x00, // str_len
+        ]);
+
+        let result = TypeInformation::new(&readable_buffer);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            assert_eq!(err.kind(), BTFErrorKind::InvalidTypeSectionOffset);
+        }
+    }
+
+    #[test]
+    fn test_type_section_end_overflow() {
+        // Test overflow when calculating type section end (start + type_len)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0x18, 0x00, 0x00, 0x00, // hdr_len
+            0x00, 0x00, 0x00, 0xFF, // type_off
+            0xFF, 0xFF, 0xFF, 0x01, // type_len
+            0x00, 0x00, 0x00, 0x00, // str_off
+            0x01, 0x00, 0x00, 0x00, // str_len
+        ]);
+
+        let result = TypeInformation::new(&readable_buffer);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            assert_eq!(err.kind(), BTFErrorKind::InvalidTypeSectionOffset);
+        }
+    }
+
+    #[test]
+    fn test_array_element_offset_overflow() {
+        // Create an array with very large element size that will overflow
+        // when calculating offset at high indexes
+        let mut type_info = get_test_type_info();
+
+        // tid:200 - Large int type (size close to u32::MAX / small divisor)
+        type_info.id_to_type_map.insert(
+            200,
+            TypeVariant::Int(Int::create(
+                Header::create(Kind::Int, 1, 0, false, 0x10000000),
+                Some(String::from("huge_int")),
+                0x10000000,
+                false,
+                false,
+                false,
+                0,
+                32,
+            )),
+        );
+
+        // tid:201 - Array of 100 huge_ints
+        type_info.id_to_type_map.insert(
+            201,
+            TypeVariant::Array(Array::create(
+                Header::create(Kind::Array, 0, 0, false, 0),
+                200, // element type
+                200, // index type
+                100, // element count
+            )),
+        );
+
+        let result = type_info.offset_of(201, "[20]");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), BTFErrorKind::InvalidTypePath);
+
+        let result = type_info.offset_of(201, "[0]");
+        assert!(result.is_ok());
     }
 }
