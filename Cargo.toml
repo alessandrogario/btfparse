@@ -8,7 +8,7 @@
 
 [package]
 name = "btfparse"
-version = "1.3.5"
+version = "1.3.6"
 edition = "2021"
 readme = "README.md"
 license = "Apache-2.0"
