@@ -401,7 +401,14 @@ impl TypeInformation {
                     if buffer.is_empty() {
                         return Err(BTFError::new(BTFErrorKind::InvalidTypePath, "Empty index"));
                     }
-                    let index = buffer.parse::<usize>().unwrap();
+
+                    let index = buffer.parse::<usize>().map_err(|error| {
+                        BTFError::new(
+                            BTFErrorKind::InvalidTypePath,
+                            &format!("Invalid index value: {error:?}"),
+                        )
+                    })?;
+
                     path_component_list.push(TypePathComponent::Index(index));
                 }
 
@@ -1255,48 +1262,71 @@ mod tests {
             );
         }
 
-        // Arrays can only be dereferenced with indexes
+        // Test invalid indexes
+        assert_eq!(
+            type_info
+                .offset_of(3, "[10000000000000000000000000000]")
+                .unwrap_err()
+                .kind(),
+            BTFErrorKind::InvalidTypePath
+        );
+
+        assert_eq!(
+            type_info.offset_of(3, "[test]").unwrap_err().kind(),
+            BTFErrorKind::InvalidTypePath
+        );
+
         assert_eq!(
             type_info.offset_of(3, "test").unwrap_err().kind(),
             BTFErrorKind::InvalidTypePath
         );
 
+        // Test valid indexes
         assert_eq!(
             type_info.offset_of(3, "[0]").unwrap(),
             (1, Offset::ByteOffset(0))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[1]").unwrap(),
             (1, Offset::ByteOffset(4))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[2]").unwrap(),
             (1, Offset::ByteOffset(8))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[3]").unwrap(),
             (1, Offset::ByteOffset(12))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[4]").unwrap(),
             (1, Offset::ByteOffset(16))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[5]").unwrap(),
             (1, Offset::ByteOffset(20))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[6]").unwrap(),
             (1, Offset::ByteOffset(24))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[7]").unwrap(),
             (1, Offset::ByteOffset(28))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[8]").unwrap(),
             (1, Offset::ByteOffset(32))
         );
+
         assert_eq!(
             type_info.offset_of(3, "[9]").unwrap(),
             (1, Offset::ByteOffset(36))
