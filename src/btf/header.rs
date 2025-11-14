@@ -36,8 +36,24 @@ pub struct Header {
 impl Header {
     /// Creates a new `TypeHeader` instance
     pub fn new(reader: &mut Reader, btf_header: &FileHeader) -> BTFResult<Header> {
-        let type_section_start = btf_header.hdr_len() + btf_header.type_off();
-        let type_section_end = type_section_start + btf_header.type_len();
+        let type_section_start = btf_header
+            .hdr_len()
+            .checked_add(btf_header.type_off())
+            .ok_or_else(|| {
+                BTFError::new(
+                    BTFErrorKind::InvalidTypeSectionOffset,
+                    "Type section start offset overflow",
+                )
+            })?;
+
+        let type_section_end = type_section_start
+            .checked_add(btf_header.type_len())
+            .ok_or_else(|| {
+                BTFError::new(
+                    BTFErrorKind::InvalidTypeSectionOffset,
+                    "Type section end offset overflow",
+                )
+            })?;
 
         if reader.offset() + TYPE_HEADER_SIZE > type_section_end as usize {
             return Err(BTFError::new(
@@ -143,5 +159,61 @@ mod tests {
         assert_eq!(type_header.vlen(), 255);
         assert!(type_header.kind_flag());
         assert_eq!(type_header.size_or_type(), 3);
+    }
+
+    #[test]
+    fn test_type_section_start_overflow() {
+        // Test overflow when calculating type section start (hdr_len + type_off)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0xFF, 0xFF, 0xFF, 0x7F, // hdr_len
+            0xFF, 0xFF, 0xFF, 0x7F, // type_off
+            0x0C, 0x00, 0x00, 0x00, // type_len
+            0x00, 0x00, 0x00, 0x00, // str_off
+            0x00, 0x00, 0x00, 0x00, // str_len
+        ]);
+
+        let mut reader = Reader::new(&readable_buffer);
+        let btf_header = FileHeader::new(&mut reader).unwrap();
+
+        let result = Header::new(&mut reader, &btf_header);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().kind(),
+            crate::btf::ErrorKind::InvalidTypeSectionOffset
+        );
+    }
+
+    #[test]
+    fn test_type_section_end_overflow() {
+        // Test overflow when calculating type section end (start + type_len)
+        let readable_buffer = ReadableBuffer::new(&[
+            //
+            // BTF header
+            //
+            0x9F, 0xEB, // magic
+            0x01, // version
+            0x00, // flags
+            0x18, 0x00, 0x00, 0x00, // hdr_len
+            0x00, 0x00, 0x00, 0xFF, // type_off
+            0xFF, 0xFF, 0xFF, 0x01, // type_len
+            0x00, 0x00, 0x00, 0x00, // str_off
+            0x00, 0x00, 0x00, 0x00, // str_len
+        ]);
+
+        let mut reader = Reader::new(&readable_buffer);
+        let btf_header = FileHeader::new(&mut reader).unwrap();
+
+        let result = Header::new(&mut reader, &btf_header);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().kind(),
+            crate::btf::ErrorKind::InvalidTypeSectionOffset
+        );
     }
 }
