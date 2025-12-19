@@ -110,26 +110,20 @@ fn get_type_enum_value_name(type_var: &TypeVariant) -> Option<String> {
 }
 
 /// A component of a type path
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TypePathComponent {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TypePathComponent<'a> {
     /// An index into an array
     Index(usize),
 
     /// A name of a struct (or union) field
-    Name(String),
+    Name(&'a str),
 }
 
-/// A list of path components
-pub type TypePath = Vec<TypePathComponent>;
-
 /// Tracks the internal state of the type path parser
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum TypePathParserState {
     /// The initial (empty) state
     Start,
-
-    /// Inside the first character of a field name
-    InsideFirstCharacterOfName,
 
     /// Inside a field name
     InsideName,
@@ -137,8 +131,213 @@ enum TypePathParserState {
     /// Inside an index
     InsideIndex,
 
-    /// After an index
+    /// After an index (expecting '.' or '[')
     AfterIndex,
+
+    /// Expecting the first character of a name (after '.')
+    ExpectingName,
+
+    /// Parser has encountered an error
+    Error,
+
+    /// Parser is done
+    Done,
+}
+
+/// An iterator over the components of a type path string
+#[derive(Debug, Clone)]
+struct TypePathComponentIter<'a> {
+    path: &'a str,
+    position: usize,
+    state: TypePathParserState,
+}
+
+impl<'a> TypePathComponentIter<'a> {
+    fn new(path: &'a str) -> Self {
+        Self {
+            path,
+            position: 0,
+            state: TypePathParserState::Start,
+        }
+    }
+}
+
+impl<'a> Iterator for TypePathComponentIter<'a> {
+    type Item = BTFResult<TypePathComponent<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.state == TypePathParserState::Done || self.state == TypePathParserState::Error {
+            return None;
+        }
+
+        let bytes = self.path.as_bytes();
+
+        // Handle empty path or end of input in certain states
+        if self.position >= bytes.len() {
+            self.state = TypePathParserState::Done;
+            return None;
+        }
+
+        match self.state {
+            TypePathParserState::Start => {
+                let c = bytes[self.position] as char;
+                if c == '[' {
+                    self.position += 1;
+                    self.state = TypePathParserState::InsideIndex;
+                    self.parse_index()
+                } else if c.is_alphabetic() || c == '_' {
+                    self.state = TypePathParserState::InsideName;
+                    self.parse_name()
+                } else {
+                    self.state = TypePathParserState::Error;
+                    Some(Err(BTFError::new(
+                        BTFErrorKind::InvalidTypePath,
+                        &format!("Invalid character at index {}", self.position),
+                    )))
+                }
+            }
+
+            TypePathParserState::InsideName => self.parse_name(),
+
+            TypePathParserState::InsideIndex => self.parse_index(),
+
+            TypePathParserState::AfterIndex => {
+                let c = bytes[self.position] as char;
+                if c == '[' {
+                    self.position += 1;
+                    self.state = TypePathParserState::InsideIndex;
+                    self.parse_index()
+                } else if c == '.' {
+                    self.position += 1;
+                    self.state = TypePathParserState::ExpectingName;
+                    self.next()
+                } else {
+                    self.state = TypePathParserState::Error;
+                    Some(Err(BTFError::new(
+                        BTFErrorKind::InvalidTypePath,
+                        &format!("Invalid character at index {}", self.position),
+                    )))
+                }
+            }
+
+            TypePathParserState::ExpectingName => {
+                if self.position >= bytes.len() {
+                    self.state = TypePathParserState::Error;
+                    return Some(Err(BTFError::new(
+                        BTFErrorKind::InvalidTypePath,
+                        "Expected name after '.'",
+                    )));
+                }
+                let c = bytes[self.position] as char;
+                if c.is_alphabetic() || c == '_' {
+                    self.state = TypePathParserState::InsideName;
+                    self.parse_name()
+                } else {
+                    self.state = TypePathParserState::Error;
+                    Some(Err(BTFError::new(
+                        BTFErrorKind::InvalidTypePath,
+                        &format!("Invalid character at index {}", self.position),
+                    )))
+                }
+            }
+
+            TypePathParserState::Done | TypePathParserState::Error => None,
+        }
+    }
+}
+
+impl<'a> TypePathComponentIter<'a> {
+    fn parse_name(&mut self) -> Option<BTFResult<TypePathComponent<'a>>> {
+        let start = self.position;
+        let bytes = self.path.as_bytes();
+
+        while self.position < bytes.len() {
+            let c = bytes[self.position] as char;
+            if c.is_alphanumeric() || c == '_' {
+                self.position += 1;
+            } else if c == '[' || c == '.' {
+                break;
+            } else {
+                self.state = TypePathParserState::Error;
+                return Some(Err(BTFError::new(
+                    BTFErrorKind::InvalidTypePath,
+                    &format!("Invalid character at index {}", self.position),
+                )));
+            }
+        }
+
+        let name = &self.path[start..self.position];
+
+        // Determine next state
+        if self.position >= bytes.len() {
+            self.state = TypePathParserState::Done;
+        } else {
+            let c = bytes[self.position] as char;
+            if c == '[' {
+                self.position += 1;
+                self.state = TypePathParserState::InsideIndex;
+            } else if c == '.' {
+                self.position += 1;
+                self.state = TypePathParserState::ExpectingName;
+            }
+        }
+
+        Some(Ok(TypePathComponent::Name(name)))
+    }
+
+    fn parse_index(&mut self) -> Option<BTFResult<TypePathComponent<'a>>> {
+        let start = self.position;
+        let bytes = self.path.as_bytes();
+
+        while self.position < bytes.len() {
+            let c = bytes[self.position] as char;
+            if c.is_numeric() {
+                self.position += 1;
+            } else if c == ']' {
+                break;
+            } else {
+                self.state = TypePathParserState::Error;
+                return Some(Err(BTFError::new(
+                    BTFErrorKind::InvalidTypePath,
+                    &format!("Invalid character at index {}", self.position),
+                )));
+            }
+        }
+
+        if self.position >= bytes.len() || bytes[self.position] as char != ']' {
+            self.state = TypePathParserState::Error;
+            return Some(Err(BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                "Unclosed index bracket",
+            )));
+        }
+
+        let index_str = &self.path[start..self.position];
+        if index_str.is_empty() {
+            self.state = TypePathParserState::Error;
+            return Some(Err(BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                "Empty index",
+            )));
+        }
+
+        let index = match index_str.parse::<usize>() {
+            Ok(i) => i,
+            Err(error) => {
+                self.state = TypePathParserState::Error;
+                return Some(Err(BTFError::new(
+                    BTFErrorKind::InvalidTypePath,
+                    &format!("Invalid index value: {error:?}"),
+                )));
+            }
+        };
+
+        // Skip the ']'
+        self.position += 1;
+        self.state = TypePathParserState::AfterIndex;
+
+        Some(Ok(TypePathComponent::Index(index)))
+    }
 }
 
 /// Type information acquired from the BTF data
@@ -159,55 +358,64 @@ generate_constructor_dispatcher!(
     Func, Float, Restrict, DataSec, TypeTag, DeclTag
 );
 
-/// This macro is used to generate the `offset_of` method for structs and unions
-macro_rules! offset_of_struct_and_union_helper {
-    ($self:ident, $current_offset:ident, $current_type:ident, $struct_or_union:ident, $name:ident, $path:ident) => {
-        // Attempt to forward the request to any unnamed member (anonymous structs). If this
-        // succeeds then we can just return the offset we get back, as it will consume the
-        // entire path.
-        for member in $struct_or_union
-            .member_list()
-            .iter()
-            .filter(|member| member.name().is_none())
-        {
-            match $self.offset_of_helper(
-                member.offset().add($current_offset)?,
-                member.tid(),
-                $path.clone(),
-            ) {
-                Ok((tid, offset)) => {
-                    return Ok((tid, offset));
-                }
+/// Lightweight error type for offset_of_helper that avoids string formatting.
+/// Only formatted into a full BTFError when the error escapes to the caller.
+#[derive(Debug)]
+enum OffsetError<'a> {
+    InvalidTypeId,
+    VoidDereference,
+    IndexOutOfBounds { index: usize, array_size: u32 },
+    ArrayOffsetOverflow,
+    PtrNotIndexable,
+    TypeNotIndexable,
+    NotStructOrUnion,
+    MemberNotFound { name: &'a str },
+    /// Wraps an existing BTFError (e.g., from offset.add() or iterator)
+    Btf(BTFError),
+}
 
-                Err(_) => continue,
-            };
-        }
+impl From<BTFError> for OffsetError<'_> {
+    fn from(e: BTFError) -> Self {
+        OffsetError::Btf(e)
+    }
+}
 
-        // Try again, this time looking for a named member that matches the current
-        // path component
-        match $struct_or_union
-            .member_list()
-            .iter()
-            .find(|member| match member.name() {
-                Some(member_name) => member_name == *$name,
-                None => false,
-            }) {
-            Some(member) => {
-                $current_type = member.tid();
-                $current_offset = $current_offset.add(member.offset())?;
+impl From<OffsetError<'_>> for BTFError {
+    fn from(e: OffsetError<'_>) -> Self {
+        match e {
+            OffsetError::InvalidTypeId => {
+                BTFError::new(BTFErrorKind::InvalidTypeID, "Invalid type id")
             }
-
-            None => {
-                return Err(BTFError::new(
-                    BTFErrorKind::InvalidTypePath,
-                    &format!(
-                        "Type {:?} does not have a member named {}",
-                        $struct_or_union, $name
-                    ),
-                ));
+            OffsetError::VoidDereference => BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                "The void type can't be dereferenced with a path",
+            ),
+            OffsetError::IndexOutOfBounds { index, array_size } => BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                &format!(
+                    "Index {index} is out of bounds for array of size {array_size}"
+                ),
+            ),
+            OffsetError::ArrayOffsetOverflow => {
+                BTFError::new(BTFErrorKind::InvalidTypePath, "Array element offset overflow")
             }
+            OffsetError::PtrNotIndexable => BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                "Type is a ptr, and dereferencing it would require a read operation",
+            ),
+            OffsetError::TypeNotIndexable => {
+                BTFError::new(BTFErrorKind::InvalidTypePath, "Type is not indexable")
+            }
+            OffsetError::NotStructOrUnion => {
+                BTFError::new(BTFErrorKind::InvalidTypePath, "Type is not a struct or union")
+            }
+            OffsetError::MemberNotFound { name } => BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                &format!("Member '{}' not found", name),
+            ),
+            OffsetError::Btf(e) => e,
         }
-    };
+    }
 }
 
 impl TypeInformation {
@@ -382,255 +590,133 @@ impl TypeInformation {
 
     /// Returns a tuple containing the next type id and the current offset
     pub fn offset_of(&self, tid: u32, path: &str) -> BTFResult<(u32, Offset)> {
-        let path_component_list = Self::split_path_components(path)?;
-        self.offset_of_helper(Offset::ByteOffset(0), tid, path_component_list)
-    }
-
-    /// Splits the given type path into its components
-    fn split_path_components(path: &str) -> BTFResult<TypePath> {
-        let mut path_component_list = TypePath::new();
-
-        let mut buffer = String::new();
-        let mut state = TypePathParserState::Start;
-
-        let save_buffer = |state: &mut TypePathParserState,
-                           buffer: &mut String,
-                           path_component_list: &mut TypePath|
-         -> BTFResult<()> {
-            match state {
-                TypePathParserState::InsideIndex => {
-                    if buffer.is_empty() {
-                        return Err(BTFError::new(BTFErrorKind::InvalidTypePath, "Empty index"));
-                    }
-
-                    let index = buffer.parse::<usize>().map_err(|error| {
-                        BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid index value: {error:?}"),
-                        )
-                    })?;
-
-                    path_component_list.push(TypePathComponent::Index(index));
-                }
-
-                TypePathParserState::InsideName => {
-                    path_component_list.push(TypePathComponent::Name(buffer.clone()));
-                }
-
-                _ => {
-                    return Err(BTFError::new(
-                        BTFErrorKind::InvalidTypePath,
-                        "Invalid state",
-                    ));
-                }
-            }
-
-            *buffer = String::new();
-            Ok(())
-        };
-
-        for (index, c) in path.chars().enumerate() {
-            match state {
-                TypePathParserState::Start => {
-                    if c == '[' {
-                        state = TypePathParserState::InsideIndex;
-                    } else if c.is_alphabetic() {
-                        buffer.push(c);
-                        state = TypePathParserState::InsideName;
-                    } else {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {index}"),
-                        ));
-                    }
-
-                    continue;
-                }
-
-                TypePathParserState::InsideFirstCharacterOfName => {
-                    if !c.is_alphabetic() {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {index}"),
-                        ));
-                    }
-
-                    buffer.push(c);
-                    state = TypePathParserState::InsideName;
-                }
-
-                TypePathParserState::InsideName => {
-                    if c == '[' {
-                        save_buffer(&mut state, &mut buffer, &mut path_component_list)?;
-                        state = TypePathParserState::InsideIndex;
-                    } else if c == '.' {
-                        save_buffer(&mut state, &mut buffer, &mut path_component_list)?;
-                        state = TypePathParserState::InsideFirstCharacterOfName;
-                    } else if c.is_alphanumeric() || c == '_' {
-                        buffer.push(c);
-                    } else {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {index}"),
-                        ));
-                    }
-                }
-
-                TypePathParserState::InsideIndex => {
-                    if c == ']' {
-                        save_buffer(&mut state, &mut buffer, &mut path_component_list)?;
-                        state = TypePathParserState::AfterIndex;
-                    } else if c.is_numeric() {
-                        buffer.push(c);
-                    } else {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {index}"),
-                        ));
-                    }
-                }
-
-                TypePathParserState::AfterIndex => {
-                    if c == '[' {
-                        state = TypePathParserState::InsideIndex;
-                    } else if c == '.' {
-                        state = TypePathParserState::InsideFirstCharacterOfName;
-                    } else {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Invalid character at index {index}"),
-                        ));
-                    }
-                }
-            }
-        }
-
-        if !buffer.is_empty() {
-            save_buffer(&mut state, &mut buffer, &mut path_component_list)?;
-        }
-
-        Ok(path_component_list)
+        let mut path_iter = TypePathComponentIter::new(path);
+        self.offset_of_impl(Offset::ByteOffset(0), tid, &mut path_iter)
+            .map_err(Into::into)
     }
 
     /// Internal helper method for `TypeInformation::offset_of`
-    fn offset_of_helper(
+    ///
+    /// Returns a lightweight `OffsetError` that avoids string formatting.
+    /// Errors are only formatted when converted to `BTFError` at the public API boundary.
+    fn offset_of_impl<'a>(
         &self,
         mut offset: Offset,
         mut tid: u32,
-        path: TypePath,
-    ) -> BTFResult<(u32, Offset)> {
-        if path.is_empty() {
-            return Ok((tid, offset));
-        }
+        path: &mut TypePathComponentIter<'a>,
+    ) -> Result<(u32, Offset), OffsetError<'a>> {
+        loop {
+            // Save iterator position before consuming (for anonymous member probing)
+            let path_for_anon = path.clone();
 
-        let type_var = self.from_id(tid).ok_or(BTFError::new(
-            BTFErrorKind::InvalidTypeID,
-            "Invalid type id",
-        ))?;
+            // Get next component
+            let component = match path.next() {
+                None => return Ok((tid, offset)),
+                Some(result) => result?,
+            };
 
-        match type_var {
-            TypeVariant::Void => {
-                return Err(BTFError::new(
-                    BTFErrorKind::InvalidTypePath,
-                    "The void type can't be dereferenced with a path",
-                ));
-            }
-
-            TypeVariant::Fwd(fwd) => {
-                return self.offset_of_helper(offset, *fwd.tid(), path);
-            }
-
-            TypeVariant::Typedef(typedef) => {
-                return self.offset_of_helper(offset, *typedef.tid(), path);
-            }
-
-            TypeVariant::Const(cnst) => {
-                return self.offset_of_helper(offset, *cnst.tid(), path);
-            }
-
-            TypeVariant::Volatile(volatile) => {
-                return self.offset_of_helper(offset, *volatile.tid(), path);
-            }
-
-            TypeVariant::Restrict(restrict) => {
-                return self.offset_of_helper(offset, *restrict.tid(), path);
-            }
-
-            _ => {}
-        }
-
-        match &path[0] {
-            TypePathComponent::Index(index) => {
-                let index = *index;
+            // Resolve through type indirections (Fwd, Typedef, Const, Volatile, Restrict)
+            let type_var = loop {
+                let type_var = self.from_id(tid).ok_or(OffsetError::InvalidTypeId)?;
 
                 match &type_var {
-                    TypeVariant::Array(array) => {
-                        let element_count = *array.element_count() as usize;
-                        if index >= element_count {
-                            return Err(BTFError::new(
-                                BTFErrorKind::InvalidTypePath,
-                                &format!(
-                                    "Index {index} is out of bounds for array of size {}",
-                                    array.element_count()
-                                ),
-                            ));
+                    TypeVariant::Fwd(fwd) => {
+                        tid = *fwd.tid();
+                    }
+                    TypeVariant::Typedef(typedef) => {
+                        tid = *typedef.tid();
+                    }
+                    TypeVariant::Const(cnst) => {
+                        tid = *cnst.tid();
+                    }
+                    TypeVariant::Volatile(volatile) => {
+                        tid = *volatile.tid();
+                    }
+                    TypeVariant::Restrict(restrict) => {
+                        tid = *restrict.tid();
+                    }
+                    _ => break type_var,
+                }
+            };
+
+            // Check for void
+            if matches!(type_var, TypeVariant::Void) {
+                return Err(OffsetError::VoidDereference);
+            }
+
+            match component {
+                TypePathComponent::Index(index) => {
+                    match &type_var {
+                        TypeVariant::Array(array) => {
+                            let element_count = *array.element_count() as usize;
+                            if index >= element_count {
+                                return Err(OffsetError::IndexOutOfBounds {
+                                    index,
+                                    array_size: *array.element_count(),
+                                });
+                            }
+
+                            let element_tid = *array.element_tid();
+                            let element_type_size = self.size_of(element_tid)?;
+
+                            let index_size = (index as u64)
+                                .checked_mul(element_type_size as u64)
+                                .and_then(|v| u32::try_from(v).ok())
+                                .ok_or(OffsetError::ArrayOffsetOverflow)?;
+
+                            offset = offset.add(index_size)?;
+                            tid = element_tid;
                         }
 
-                        let element_tid = *array.element_tid();
-                        let element_type_size = self.size_of(element_tid)?;
+                        TypeVariant::Ptr(_) => {
+                            return Err(OffsetError::PtrNotIndexable);
+                        }
 
-                        let index_size = (index as u64)
-                            .checked_mul(element_type_size as u64)
-                            .and_then(|v| u32::try_from(v).ok())
-                            .ok_or_else(|| {
-                                BTFError::new(
-                                    BTFErrorKind::InvalidTypePath,
-                                    "Array element offset overflow",
-                                )
-                            })?;
-
-                        offset = offset.add(index_size)?;
-
-                        tid = element_tid;
+                        _ => {
+                            return Err(OffsetError::TypeNotIndexable);
+                        }
                     }
+                }
 
-                    type_var => {
-                        let error_message = match type_var {
-                            TypeVariant::Ptr(_) => {
-                                format!("Type {type_var:?} is a ptr, and dereferencing it would require a read operation")
+                TypePathComponent::Name(name) => {
+                    let member_list: &[_] = match &type_var {
+                        TypeVariant::Struct(s) => s.member_list(),
+                        TypeVariant::Union(u) => u.member_list(),
+                        _ => {
+                            return Err(OffsetError::NotStructOrUnion);
+                        }
+                    };
+
+                    // Try anonymous members first (using path_for_anon which includes current component)
+                    for member in member_list.iter().filter(|m| m.name().is_none()) {
+                        let mut anon_path = path_for_anon.clone();
+                        match self.offset_of_impl(
+                            member.offset().add(offset)?,
+                            member.tid(),
+                            &mut anon_path,
+                        ) {
+                            Ok((result_tid, result_offset)) => {
+                                return Ok((result_tid, result_offset));
                             }
-
-                            _ => {
-                                format!("Type {type_var:?} is not indexable")
-                            }
-                        };
-
-                        return Err(BTFError::new(BTFErrorKind::InvalidTypePath, &error_message));
+                            Err(_) => continue,
+                        }
                     }
-                };
+
+                    // Try named members
+                    match member_list.iter().find(|member| {
+                        member.name().as_deref() == Some(name)
+                    }) {
+                        Some(member) => {
+                            tid = member.tid();
+                            offset = offset.add(member.offset())?;
+                        }
+                        None => {
+                            return Err(OffsetError::MemberNotFound { name });
+                        }
+                    }
+                }
             }
-
-            TypePathComponent::Name(name) => {
-                match &type_var {
-                    TypeVariant::Struct(str) => {
-                        offset_of_struct_and_union_helper!(self, offset, tid, str, name, path);
-                    }
-
-                    TypeVariant::Union(union) => {
-                        offset_of_struct_and_union_helper!(self, offset, tid, union, name, path);
-                    }
-
-                    _ => {
-                        return Err(BTFError::new(
-                            BTFErrorKind::InvalidTypePath,
-                            &format!("Type {type_var:?} is not a struct or union"),
-                        ));
-                    }
-                };
-            }
-        };
-
-        self.offset_of_helper(offset, tid, path[1..].to_vec())
+        }
     }
 }
 
@@ -648,44 +734,58 @@ mod tests {
     };
     use crate::utils::ReadableBuffer;
 
+    /// Helper to collect iterator results into a Vec for testing
+    fn collect_path_components(path: &str) -> BTFResult<Vec<TypePathComponent<'_>>> {
+        TypePathComponentIter::new(path).collect()
+    }
+
     #[test]
-    fn test_split_path_components() {
-        let type_path = TypeInformation::split_path_components("").unwrap();
+    fn test_path_component_iter() {
+        let type_path = collect_path_components("").unwrap();
         assert!(type_path.is_empty());
 
-        let type_path = TypeInformation::split_path_components("[1]").unwrap();
+        let type_path = collect_path_components("[1]").unwrap();
         assert_eq!(type_path.len(), 1);
         assert_eq!(type_path[0], TypePathComponent::Index(1));
 
-        let type_path = TypeInformation::split_path_components("[1][2]").unwrap();
+        let type_path = collect_path_components("[1][2]").unwrap();
         assert_eq!(type_path.len(), 2);
         assert_eq!(type_path[0], TypePathComponent::Index(1));
         assert_eq!(type_path[1], TypePathComponent::Index(2));
 
-        let type_path = TypeInformation::split_path_components("test").unwrap();
+        let type_path = collect_path_components("test").unwrap();
         assert_eq!(type_path.len(), 1);
-        assert_eq!(type_path[0], TypePathComponent::Name("test".to_string()));
+        assert_eq!(type_path[0], TypePathComponent::Name("test"));
 
-        let type_path = TypeInformation::split_path_components("array[10]").unwrap();
+        let type_path = collect_path_components("array[10]").unwrap();
         assert_eq!(type_path.len(), 2);
-        assert_eq!(type_path[0], TypePathComponent::Name("array".to_string()));
+        assert_eq!(type_path[0], TypePathComponent::Name("array"));
         assert_eq!(type_path[1], TypePathComponent::Index(10));
 
-        let type_path = TypeInformation::split_path_components("array[10].array2[11]").unwrap();
+        let type_path = collect_path_components("array[10].array2[11]").unwrap();
         assert_eq!(type_path.len(), 4);
-        assert_eq!(type_path[0], TypePathComponent::Name("array".to_string()));
+        assert_eq!(type_path[0], TypePathComponent::Name("array"));
         assert_eq!(type_path[1], TypePathComponent::Index(10));
-        assert_eq!(type_path[2], TypePathComponent::Name("array2".to_string()));
+        assert_eq!(type_path[2], TypePathComponent::Name("array2"));
         assert_eq!(type_path[3], TypePathComponent::Index(11));
 
-        TypeInformation::split_path_components(".value").unwrap_err();
-        TypeInformation::split_path_components(".[10]").unwrap_err();
-        TypeInformation::split_path_components("[value").unwrap_err();
-        TypeInformation::split_path_components("]value").unwrap_err();
-        TypeInformation::split_path_components("1").unwrap_err();
-        TypeInformation::split_path_components("array[10]value").unwrap_err();
-        TypeInformation::split_path_components("array[]").unwrap_err();
-        TypeInformation::split_path_components("[]").unwrap_err();
+        // Test underscore in names
+        let type_path = collect_path_components("_test").unwrap();
+        assert_eq!(type_path.len(), 1);
+        assert_eq!(type_path[0], TypePathComponent::Name("_test"));
+
+        let type_path = collect_path_components("test_field").unwrap();
+        assert_eq!(type_path.len(), 1);
+        assert_eq!(type_path[0], TypePathComponent::Name("test_field"));
+
+        assert!(collect_path_components(".value").is_err());
+        assert!(collect_path_components(".[10]").is_err());
+        assert!(collect_path_components("[value").is_err());
+        assert!(collect_path_components("]value").is_err());
+        assert!(collect_path_components("1").is_err());
+        assert!(collect_path_components("array[10]value").is_err());
+        assert!(collect_path_components("array[]").is_err());
+        assert!(collect_path_components("[]").is_err());
     }
 
     fn get_test_type_info() -> TypeInformation {
