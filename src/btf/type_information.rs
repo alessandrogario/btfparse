@@ -364,12 +364,17 @@ generate_constructor_dispatcher!(
 enum OffsetError<'a> {
     InvalidTypeId,
     VoidDereference,
-    IndexOutOfBounds { index: usize, array_size: u32 },
+    IndexOutOfBounds {
+        index: usize,
+        array_size: u32,
+    },
     ArrayOffsetOverflow,
     PtrNotIndexable,
     TypeNotIndexable,
     NotStructOrUnion,
-    MemberNotFound { name: &'a str },
+    MemberNotFound {
+        name: &'a str,
+    },
     /// Wraps an existing BTFError (e.g., from offset.add() or iterator)
     Btf(BTFError),
 }
@@ -392,13 +397,12 @@ impl From<OffsetError<'_>> for BTFError {
             ),
             OffsetError::IndexOutOfBounds { index, array_size } => BTFError::new(
                 BTFErrorKind::InvalidTypePath,
-                &format!(
-                    "Index {index} is out of bounds for array of size {array_size}"
-                ),
+                &format!("Index {index} is out of bounds for array of size {array_size}"),
             ),
-            OffsetError::ArrayOffsetOverflow => {
-                BTFError::new(BTFErrorKind::InvalidTypePath, "Array element offset overflow")
-            }
+            OffsetError::ArrayOffsetOverflow => BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                "Array element offset overflow",
+            ),
             OffsetError::PtrNotIndexable => BTFError::new(
                 BTFErrorKind::InvalidTypePath,
                 "Type is a ptr, and dereferencing it would require a read operation",
@@ -406,9 +410,10 @@ impl From<OffsetError<'_>> for BTFError {
             OffsetError::TypeNotIndexable => {
                 BTFError::new(BTFErrorKind::InvalidTypePath, "Type is not indexable")
             }
-            OffsetError::NotStructOrUnion => {
-                BTFError::new(BTFErrorKind::InvalidTypePath, "Type is not a struct or union")
-            }
+            OffsetError::NotStructOrUnion => BTFError::new(
+                BTFErrorKind::InvalidTypePath,
+                "Type is not a struct or union",
+            ),
             OffsetError::MemberNotFound { name } => BTFError::new(
                 BTFErrorKind::InvalidTypePath,
                 &format!("Member '{}' not found", name),
@@ -645,38 +650,36 @@ impl TypeInformation {
             }
 
             match component {
-                TypePathComponent::Index(index) => {
-                    match &type_var {
-                        TypeVariant::Array(array) => {
-                            let element_count = *array.element_count() as usize;
-                            if index >= element_count {
-                                return Err(OffsetError::IndexOutOfBounds {
-                                    index,
-                                    array_size: *array.element_count(),
-                                });
-                            }
-
-                            let element_tid = *array.element_tid();
-                            let element_type_size = self.size_of(element_tid)?;
-
-                            let index_size = (index as u64)
-                                .checked_mul(element_type_size as u64)
-                                .and_then(|v| u32::try_from(v).ok())
-                                .ok_or(OffsetError::ArrayOffsetOverflow)?;
-
-                            offset = offset.add(index_size)?;
-                            tid = element_tid;
+                TypePathComponent::Index(index) => match &type_var {
+                    TypeVariant::Array(array) => {
+                        let element_count = *array.element_count() as usize;
+                        if index >= element_count {
+                            return Err(OffsetError::IndexOutOfBounds {
+                                index,
+                                array_size: *array.element_count(),
+                            });
                         }
 
-                        TypeVariant::Ptr(_) => {
-                            return Err(OffsetError::PtrNotIndexable);
-                        }
+                        let element_tid = *array.element_tid();
+                        let element_type_size = self.size_of(element_tid)?;
 
-                        _ => {
-                            return Err(OffsetError::TypeNotIndexable);
-                        }
+                        let index_size = (index as u64)
+                            .checked_mul(element_type_size as u64)
+                            .and_then(|v| u32::try_from(v).ok())
+                            .ok_or(OffsetError::ArrayOffsetOverflow)?;
+
+                        offset = offset.add(index_size)?;
+                        tid = element_tid;
                     }
-                }
+
+                    TypeVariant::Ptr(_) => {
+                        return Err(OffsetError::PtrNotIndexable);
+                    }
+
+                    _ => {
+                        return Err(OffsetError::TypeNotIndexable);
+                    }
+                },
 
                 TypePathComponent::Name(name) => {
                     let member_list: &[_] = match &type_var {
@@ -703,9 +706,10 @@ impl TypeInformation {
                     }
 
                     // Try named members
-                    match member_list.iter().find(|member| {
-                        member.name().as_deref() == Some(name)
-                    }) {
+                    match member_list
+                        .iter()
+                        .find(|member| member.name().as_deref() == Some(name))
+                    {
                         Some(member) => {
                             tid = member.tid();
                             offset = offset.add(member.offset())?;
