@@ -18,6 +18,9 @@ use crate::{
 
 use std::{collections::BTreeMap, ops::Add};
 
+#[cfg(feature = "caching")]
+use std::{collections::HashMap, sync::RwLock};
+
 /// An enum representing a BTF type
 #[derive(Debug, Clone)]
 pub enum TypeVariant {
@@ -151,6 +154,10 @@ pub struct TypeInformation {
 
     /// Maps a type id to a type name
     id_to_name_map: BTreeMap<u32, String>,
+
+    /// Cache for offset_of results to avoid redundant path parsing and type traversal
+    #[cfg(feature = "caching")]
+    offset_cache: RwLock<HashMap<(u32, String), (u32, Offset)>>,
 }
 
 // Generate the parse_type functions for each type
@@ -262,6 +269,8 @@ impl TypeInformation {
             id_to_type_map,
             name_to_id_map,
             id_to_name_map,
+            #[cfg(feature = "caching")]
+            offset_cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -382,6 +391,33 @@ impl TypeInformation {
 
     /// Returns a tuple containing the next type id and the current offset
     pub fn offset_of(&self, tid: u32, path: &str) -> BTFResult<(u32, Offset)> {
+        #[cfg(feature = "caching")]
+        {
+            // Check cache first (gracefully handle poisoned lock by computing fresh)
+            let cache_key = (tid, path.to_string());
+            if let Ok(cache) = self.offset_cache.read() {
+                if let Some(&cached) = cache.get(&cache_key) {
+                    return Ok(cached);
+                }
+            }
+
+            // Cache miss - compute the result
+            let result = self.offset_of_uncached(tid, path)?;
+
+            // Store in cache (ignore if lock is poisoned)
+            if let Ok(mut cache) = self.offset_cache.write() {
+                cache.insert(cache_key, result);
+            }
+
+            return Ok(result);
+        }
+
+        #[cfg(not(feature = "caching"))]
+        self.offset_of_uncached(tid, path)
+    }
+
+    /// Internal uncached implementation of offset_of
+    fn offset_of_uncached(&self, tid: u32, path: &str) -> BTFResult<(u32, Offset)> {
         let path_component_list = Self::split_path_components(path)?;
         self.offset_of_helper(Offset::ByteOffset(0), tid, path_component_list)
     }
@@ -639,6 +675,9 @@ mod tests {
     use std::vec;
 
     use super::*;
+
+    #[cfg(feature = "caching")]
+    use std::{collections::HashMap, sync::RwLock};
     use crate::btf::{
         data_sec::Variable as DataSecVariable,
         enum64::{Integer64Value as IntegerValue64, NamedValue64},
@@ -693,6 +732,8 @@ mod tests {
             id_to_type_map: BTreeMap::<u32, TypeVariant>::new(),
             name_to_id_map: BTreeMap::<String, u32>::new(),
             id_to_name_map: BTreeMap::<u32, String>::new(),
+            #[cfg(feature = "caching")]
+            offset_cache: RwLock::new(HashMap::new()),
         };
 
         // tid:1 BTF_KIND_INT
