@@ -11,7 +11,7 @@ mod utils;
 
 pub use btf::{
     Array, Const, DataSec, DeclTag, Enum, Enum64, Error, ErrorKind, Float, Func, FuncProto, Fwd,
-    Int, Integer32Value, Integer64Value, Kind, NamedValue32, NamedValue32List, NamedValue64,
-    NamedValue64List, Offset, Ptr, Readable, Restrict, Result, Struct, Type, TypeInformation,
-    TypeTag, TypeVariant, Typedef, Union, Var, Volatile,
+    Int, Integer32Value, Integer64Value, Kind, Member, MemberList, NamedValue32, NamedValue32List,
+    NamedValue64, NamedValue64List, Offset, Ptr, Readable, Restrict, Result, Struct, Type,
+    TypeInformation, TypeTag, TypeVariant, Typedef, Union, Var, Volatile,
 };
