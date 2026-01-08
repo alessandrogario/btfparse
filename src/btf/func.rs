@@ -8,8 +8,8 @@
 
 use crate::{
     btf::{
-        parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
-        Result as BTFResult, Type,
+        Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
+        Result as BTFResult, Type, parse_string,
     },
     define_type,
     utils::Reader,

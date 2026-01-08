@@ -564,9 +564,10 @@ impl TypeInformation {
                 let list_head_type_size = match list_head_type_var {
                     TypeVariant::Struct(str) => Ok(*str.size()),
 
-                    _ => {
-                        Err(BTFError::new(BTFErrorKind::InvalidTypeID, "The extracted `struct list_head` type ID, used to extract the pointer size, is not a struct type"))
-                    }
+                    _ => Err(BTFError::new(
+                        BTFErrorKind::InvalidTypeID,
+                        "The extracted `struct list_head` type ID, used to extract the pointer size, is not a struct type",
+                    )),
                 }?;
 
                 Ok(list_head_type_size / 2)
@@ -608,10 +609,10 @@ impl TypeInformation {
         {
             // Check cache first (gracefully handle poisoned lock by computing fresh)
             let cache_key = (tid, path.to_string());
-            if let Ok(cache) = self.offset_cache.read() {
-                if let Some(&cached) = cache.get(&cache_key) {
-                    return Ok(cached);
-                }
+            if let Ok(cache) = self.offset_cache.read()
+                && let Some(&cached) = cache.get(&cache_key)
+            {
+                return Ok(cached);
             }
 
             // Cache miss - compute the result
@@ -622,7 +623,7 @@ impl TypeInformation {
                 cache.insert(cache_key, result);
             }
 
-            return Ok(result);
+            Ok(result)
         }
 
         #[cfg(not(feature = "caching"))]
@@ -767,11 +768,11 @@ mod tests {
     use super::*;
 
     use crate::btf::{
-        data_sec::Variable as DataSecVariable,
-        enum64::{Integer64Value as IntegerValue64, NamedValue64},
-        r#enum::{Integer32Value as IntegerValue32, NamedValue32},
-        struct_union::Member as StructMember,
         LinkageType,
+        data_sec::Variable as DataSecVariable,
+        r#enum::{Integer32Value as IntegerValue32, NamedValue32},
+        enum64::{Integer64Value as IntegerValue64, NamedValue64},
+        struct_union::Member as StructMember,
     };
     use crate::utils::ReadableBuffer;
     #[cfg(feature = "caching")]

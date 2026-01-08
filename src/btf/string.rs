@@ -79,7 +79,7 @@ pub fn parse_string(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_string, FileHeader};
+    use super::{FileHeader, parse_string};
     use crate::utils::{ReadableBuffer, Reader};
 
     #[test]
