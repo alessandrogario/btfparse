@@ -8,8 +8,8 @@
 
 use crate::{
     btf::{
-        parse_string, Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind,
-        Offset, Result as BTFResult, Type,
+        Error as BTFError, ErrorKind as BTFErrorKind, FileHeader, Header, Kind, Offset,
+        Result as BTFResult, Type, parse_string,
     },
     define_type,
     utils::Reader,
@@ -164,9 +164,9 @@ define_type!(Union, Data, name: Option<String>, size: usize, member_list: Member
 #[cfg(test)]
 mod tests {
     use super::Struct;
+    use crate::Type;
     use crate::btf::{FileHeader, Header, Offset};
     use crate::utils::{ReadableBuffer, Reader};
-    use crate::Type;
 
     #[test]
     fn test_standard_struct_union() {

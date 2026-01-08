@@ -108,13 +108,17 @@ mod tests {
             Offset::BitOffsetAndSize(1, 1)
         );
 
-        assert!(Offset::BitOffsetAndSize(0, 0)
-            .add(Offset::ByteOffset(1))
-            .is_err());
+        assert!(
+            Offset::BitOffsetAndSize(0, 0)
+                .add(Offset::ByteOffset(1))
+                .is_err()
+        );
 
-        assert!(Offset::BitOffsetAndSize(0, 0)
-            .add(Offset::BitOffsetAndSize(1, 1))
-            .is_err());
+        assert!(
+            Offset::BitOffsetAndSize(0, 0)
+                .add(Offset::BitOffsetAndSize(1, 1))
+                .is_err()
+        );
     }
 
     #[test]
